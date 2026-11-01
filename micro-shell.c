@@ -12,13 +12,29 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define SHELL_DISPALY_HEAD(x)       Terminal_Print((x),"\033[1m\033[35m%s\033[0m ->",(x)->host_name)
-#define SHELL_HEAD(x,string)        Terminal_Print((x),"\033[1m\033[35m%s\033[0m ->%s",(x)->host_name,(string))
+#define ANSI_FONT_BOLD              "\x1B[1m"       /*加粗*/
+#define ANSI_FONT_ITALIC            "\x1B[3m"       /*斜体*/
+#define ANSI_FONT_UNDERLINE         "\x1B[4m"       /*下划线*/
+#define ANSI_FONT_HIGHLIGHT         "\x1B[7m"       /*反显*/
+#define ANSI_FONT_STRIKETHROUGH     "\x1B[9m"       /*删除线*/
+
+#define ANSI_COLOR_RED   "\x1B[31m"
+#define ANSI_COLOR_GRN   "\x1B[32m"
+#define ANSI_COLOR_YEL   "\x1B[33m"
+#define ANSI_COLOR_BLU   "\x1B[34m"
+#define ANSI_COLOR_MAG   "\x1B[35m"
+#define ANSI_COLOR_CYN   "\x1B[36m"
+#define ANSI_COLOR_WHT   "\x1B[37m"
+#define ANSI_COLOR_RESET "\x1B[0m"
+
+#define SHELL_DISPALY_HEAD(x)       Terminal_Print((x),ANSI_FONT_BOLD ANSI_COLOR_MAG"%s" ANSI_COLOR_RESET " ->", (x)->host_name)
+#define SHELL_HEAD(x,string)        Terminal_Print((x),ANSI_FONT_BOLD ANSI_COLOR_MAG"%s" ANSI_COLOR_RESET " ->%s", (x)->host_name, (string))
 #define SHELL_BACK_TO_HEAD(x)       Terminal_Print((x),"\r\033[K")
+#define SHELL_DISPLAY_RET(x, ret)   Terminal_Print((x), "%s%d "ANSI_COLOR_RESET, (ret) == 0 ? ANSI_COLOR_GRN : ANSI_COLOR_RED, (ret));
 
 #define SHELL_HELLO_INTERFACE(x)    \
         Terminal_Print((x), "*******************************************************\r\n"\
-                            "****************     FOC     SHELL     ****************\r\n"\
+                            "****************____MICRO_____SHELL____****************\r\n"\
                             "*******************************************************\r\n")
 
 #define SHELL_NEW_LINE(x)           Terminal_Print((x),"\r\n")
@@ -29,8 +45,8 @@
                             "cache is full!! change your cache size or change your command to fix it \r\n"\
                             "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\r\n")
 
-#define SHELL_INF(x,...)            Terminal_Print((x),"<inf> : %s\r\n",##__VA_ARGS__)
-#define SHELL_ERR(x,...)            Terminal_Print((x),"<err> : %s\r\n",##__VA_ARGS__)
+#define SHELL_INF(x,...)            Terminal_Print((x),ANSI_COLOR_GRN "<inf> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
+#define SHELL_ERR(x,...)            Terminal_Print((x),ANSI_COLOR_RED "<err> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
 
 #if !defined(UNUSED)
 #define UNUSED(X) (void)X      /* To avoid gcc/g++ warnings */
@@ -289,6 +305,7 @@ static int Terminal_Function_Complite (Shell_Handle_t *shell,
     }
     else
     {
+        /*not any input but push tab, just print all command to screen let user select*/
         for (unsigned short i = 0; i < shell->command_num; i++)
         {
             Terminal_Print(shell, "%-8s ",command_list[i]->name);
@@ -469,7 +486,7 @@ int Shell_push_data(Shell_Handle_t *shell,
 }
 
 /*
- * @brief 该函数用于循环运行shell解算和命令处理，每调用一次理论上最多能处理一半32字节的数据
+ * @brief 该函数用于循环运行shell解算和命令处理，每调用一次理论上最多能处理32字节的数据
  *       该函数处理后会自动退出，如果需要在操作系统环境下将该函数当作线程运行的话，需要额外的
  *      死循环
  * @param shell 终端的虚拟句柄
@@ -480,6 +497,7 @@ int Shell_push_data(Shell_Handle_t *shell,
 int Shell_Task (Shell_Handle_t *shell)
 {
     char data[32] = {0};
+    /*可能这个临时存储器得去掉,直接用cache当存储器*/
     unsigned char size = FIFO_pull_data(&shell->fifo, data, sizeof(data));
     if (size == 0)
     {
@@ -504,6 +522,7 @@ int Shell_Task (Shell_Handle_t *shell)
         /*clean reciver*/
         if (Terminal_ESC_Mulit_Byte_Anlayze(shell, data[i]) == 0)
         {
+            /*这里有问题,不能这样清*/
             for (unsigned short clean = 0; clean < size - i; clean++)
             {
                 data[clean] = 0;
@@ -571,20 +590,23 @@ int Shell_Task (Shell_Handle_t *shell)
                 shell->data_conter[push_number] = shell->data_conter[push_number - 1];
             }
             //dilime params
-            void *params[SHELL_MAX_PARAM_NUMBER];
+            void *params[SHELL_MAX_PARAM_NUMBER + 1];
             params[0] = (void *)shell;
             short params_number = Terminal_Get_Param(shell->data_cache[shell->cache_group_number]," ",&params[1],SHELL_MAX_PARAM_NUMBER);
             //search functuin
             Shell_Command_Typedef *cmd = Shell_Serch_Command(shell,(char *)params[1]);
+            int ret = 0;
             if (NULL == cmd)
             {
                 Terminal_Print(shell, "%s : can`t not fine command\r\n",params[1]);
+                ret = -SHELL_NO_FETCH;
             }
             else
             {
-                cmd->terminal_function(params_number,params);
+                ret = cmd->terminal_function(params_number,params);
             }
-            shell->data_conter[0] = 0;
+            SHELL_DISPLAY_RET(shell, ret);
+            shell->data_conter[shell->cache_group_number] = 0;
         }
         //anthe loop steart
         SHELL_DISPALY_HEAD(shell);
@@ -595,240 +617,3 @@ int Shell_Task (Shell_Handle_t *shell)
     }
     return 0;
 }
-
-//user regiest command
-
-
-// const Read_Set_Orther_Typedef first_order_list[]={
-//     {"-mode",   NULL,1},
-//     {"-motion", "-m",2},
-//     {"-speed",  "-s",3},
-//     {"-touque", "-t",4},
-//     {"-damping","-d",5},
-//     {"-Kp",     "-k",6}
-// };
-// const Read_Set_Orther_Typedef second_order_list[]={
-//     {"foc",     "f",1},
-//     {"speed",   "s",2},
-//     {"touque",  "t",3},
-//     {"ssm",    NULL,4},
-//     {"enable",  "en",5},
-//     {"disable", "dis",6}
-// };
-
-// int cmd_foc_set_read (FOC_Handle_TypeDef *hfoc,int argc,char **argv)
-// {
-//     //get read or set
-//     char *ptr[5];
-//     unsigned char num = Terminal_Get_Param(argv[0],"-",ptr,5);
-//     unsigned char read_or_set = 0;
-//     for (unsigned char couter = 0; couter < num; couter ++)
-//     {
-//         if(strcmp(ptr[couter],"set")==0)read_or_set = 1;
-//     }
-
-//     unsigned char first_command = 0;
-//     unsigned char second_command = 0;
-//     //argc check
-//     if (argc < 2)
-//     {
-//         Terminal_Print(hfoc,"param is to less \r\n");
-//         return 1;
-//     }
-//     // order mulite command
-//     unsigned char param_couter = 1;
-//     do
-//     {
-//         // find first param
-//         for (unsigned char o = 0; o < sizeof(first_order_list)/sizeof(Read_Set_Orther_Typedef); o++)
-//         {
-//             if (strcmp(argv[param_couter],first_order_list[o].name) == 0 || strcmp(argv[param_couter],first_order_list[o].nick_name) == 0)
-//             {
-//                 first_command = first_order_list[o].pin_key;
-//                 break;
-//             }
-//         }
-//         //can not find
-//         if (!first_command)
-//         {
-//             Terminal_Print(hfoc,"%-2s:param cant not find\r\n",argv[param_couter]);
-//             return 1;
-//         }
-//         param_couter ++;
-//         //find secend param (may be cant find but dot worry)
-//         for (unsigned char p = 0; p < sizeof(second_order_list)/sizeof(Read_Set_Orther_Typedef); p++)
-//         {
-//             if (strcmp(argv[param_couter],second_order_list[p].name) == 0 || strcmp(argv[param_couter],second_order_list[p].nick_name) == 0)
-//             {
-//                 second_command = second_order_list[p].pin_key;
-//                 break;
-//             }
-//         }
-
-//         //ansizes pararm
-//         switch (first_command)
-//         {
-//         case 1:     //-mode
-//             if (read_or_set)
-//             {
-//                 switch (second_command)
-//                 {
-//                 case 1:     //foc mode
-//                     hfoc->motion_target = hfoc->motion_sensor.Sensor_all_motion;
-//                     hfoc->speed_target = 0;
-//                     hfoc->curren_target = 0;
-//                     hfoc->foc_mode = FOC_MODE_MOTION_LOOP;
-//                     Terminal_Print(hfoc,"set to foc mode\r\n");
-//                     break;
-//                 case 2:     //speed mode
-//                     hfoc->motion_target = hfoc->motion_sensor.Sensor_all_motion;
-//                     hfoc->speed_target = 0;
-//                     hfoc->curren_target = 0;
-//                     hfoc->foc_mode = FOC_MODE_SPEED_LOOP;
-//                     Terminal_Print(hfoc,"set to speed mode\r\n");
-//                     break;
-//                 case 3:     //touque mode
-//                     hfoc->motion_target = hfoc->motion_sensor.Sensor_all_motion;
-//                     hfoc->speed_target = 0;
-//                     hfoc->curren_target = 0;
-//                     hfoc->foc_mode = FOC_MODE_TORQUE_LOOP;
-//                     Terminal_Print(hfoc,"set to touque mode\r\n");
-//                     break;
-//                 case 4:     //ssm mode
-//                     hfoc->motion_target = hfoc->motion_sensor.Sensor_all_motion;
-//                     hfoc->speed_target = 0;
-//                     hfoc->curren_target = 0;
-//                     hfoc->foc_mode = FOC_MODE_SSM_MODE;
-//                     Terminal_Print(hfoc,"set to ssm mode\r\n");
-//                     break;
-//                 case 5:     //enable (reflush only)
-//                     hfoc->motion_target = hfoc->motion_sensor.Sensor_all_motion;
-//                     hfoc->speed_target = 0;
-//                     hfoc->curren_target = 0;
-//                     hfoc->foc_mode = FOC_MODE_REFRESH_DATA_ONLY;
-//                     Terminal_Print(hfoc,"enable motor and set to Refresh data mode\r\n");
-//                     break;
-//                 case 6:     //disable motor
-//                     hfoc->motion_target = hfoc->motion_sensor.Sensor_all_motion;
-//                     hfoc->speed_target = 0;
-//                     hfoc->curren_target = 0;
-//                     hfoc->foc_mode = FOC_MODE_DISABLE;
-//                     Terminal_Print(hfoc,"disable motor\r\n");
-//                     break;
-//                 default:
-//                     Terminal_Print(hfoc,"unkwon second command: %s\r\n",argv[param_couter]);
-//                     break;
-//                 }
-//             }else{                                                  //read param
-//                 switch (hfoc->foc_mode)
-//                 {
-//                 case FOC_MODE_SSM_MODE:
-//                     Terminal_Print(hfoc,"FOC mode is SSM Mode\r\n");
-//                     break;
-//                 case FOC_MODE_MOTION_LOOP:
-//                     Terminal_Print(hfoc,"FOC mode is Motion(FOC) Mode\r\n");
-//                     break;
-//                 case FOC_MODE_SPEED_LOOP:
-//                     Terminal_Print(hfoc,"FOC mode is Speed Mode\r\n");
-//                     break;
-//                 case FOC_MODE_TORQUE_LOOP:
-//                     Terminal_Print(hfoc,"FOC mode is Touque Mode\r\n");
-//                     break;
-//                 case FOC_MODE_DISABLE:
-//                     Terminal_Print(hfoc,"FOC mode is Disable\r\n");
-//                     break;
-//                 case FOC_MODE_REFRESH_DATA_ONLY:
-//                     Terminal_Print(hfoc,"FOC mode is Refresh Data Only\r\n");
-//                     break;
-//                 default:
-//                     Terminal_Print(hfoc,"FOC mode is unkwon, mode code is %d\r\n",hfoc->foc_mode);
-//                     break;
-//                 }
-//             }
-//             break;
-//         case 2:     //-motion
-//             if (read_or_set)
-//             {
-//                 float motion = atof(argv[param_couter]);
-//                 hfoc->motion_target = motion;
-//                 Terminal_Print(hfoc,"set motion to %g\r\n",motion);
-//             }
-//             else        //read
-//             {
-//                 Terminal_Print(hfoc,"read motion %g\r\n",hfoc->motion_sensor.Sensor_all_motion);
-//             }
-//             break;
-//         case 3:     //-speed
-//             if (read_or_set)
-//             {
-//                 float speed = atof(argv[param_couter]);
-//                 if (hfoc->foc_mode == FOC_MODE_MOTION_LOOP)
-//                 {
-//                     hfoc->motion_loop_pid.limit = speed;
-//                     Terminal_Print(hfoc,"set speed_limit to %g\r\n",speed);
-//                 }
-//                 else
-//                 {
-//                     hfoc->speed_target = speed;
-//                     Terminal_Print(hfoc,"set speed to %g\r\n",speed);
-//                 }
-//             }
-//             else        //read
-//             {
-//                 Terminal_Print(hfoc,"read speed %g\r\n",hfoc->motion_sensor.Sensor_speed);
-//             }
-//             break;
-//         case 4:     //-touque
-//             if (read_or_set)
-//             {
-//                 float touque = atof(argv[param_couter]);
-//                 if (hfoc->foc_mode == FOC_MODE_SPEED_LOOP || hfoc->foc_mode == FOC_MODE_MOTION_LOOP)
-//                 {
-//                     hfoc->speed_loop_pid.limit = touque;   
-//                     Terminal_Print(hfoc,"set touque limit to %g\r\n",touque);
-//                 }
-//                 else
-//                 {
-//                     hfoc->curren_target = touque;
-//                     Terminal_Print(hfoc,"set touque to %g\r\n",touque);
-//                 }
-//             }
-//             else        //read
-//             {
-//                 Terminal_Print(hfoc,"read touque %g\r\n",hfoc->curren_sensor.D_Q_Curren.Q_Curren);
-//             }
-//             break;
-//         case 5:     //-damping
-//             if (read_or_set)
-//             {
-//                 float damping = atof(argv[param_couter]);
-//                 hfoc->damping_target = damping;
-//                 Terminal_Print(hfoc,"set damping to %g\r\n",damping);
-//             }
-//             else        //read
-//             {
-//                 Terminal_Print(hfoc,"read damping %g\r\n",hfoc->damping_target);
-//             }
-//             break;
-//         case 6:     //kp
-//             if (read_or_set)
-//             {
-//                 float kp = atof(argv[param_couter]);
-//                 hfoc->Kp_target = kp;
-//                 Terminal_Print(hfoc,"set Kp to %g\r\n",kp);
-//             }
-//             else        //read
-//             {
-//                 Terminal_Print(hfoc,"read Kp %g\r\n",hfoc->Kp_target);
-//             }
-//             break;
-//         default:
-//             Terminal_Print(hfoc,"can not find param: %s ,please use -help or -h for help\r\n",argv[param_couter - 1]);
-//             break;
-//         }
-//         if (read_or_set)param_couter++;
-//     } while (param_couter < argc);
-//     // end
-//     return 0;
-// }
-

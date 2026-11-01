@@ -28,7 +28,7 @@ extern"C"{
 #define SHELL_MAX_HOST_NAME_LEN     16
 
 /*Host name default*/
-#define SHELL_HOST_NAME "FOC"
+#define SHELL_HOST_NAME "root"
 
 #define    SHELL_ERROR      1
 #define    SHELL_BUSY       2
@@ -51,6 +51,7 @@ typedef struct
     /*it is send byte to out side api function*/
     void (*terminal_send_message)(char *message,unsigned short size);
 
+    /*将这个替换成一个双向环形链表似乎会更好*/
     /*data cache for history*/
     char data_cache[SHELL_CACHE_DEEP][SHELL_MAX_LEN];
 
