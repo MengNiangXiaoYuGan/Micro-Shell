@@ -5,6 +5,10 @@
  * 
 */
 
+/*
+ * 该库实现了单向非循环链表的创建，头插，尾插，整体删除的功能，
+*/
+
 #if !defined(LINKED_LIST)
 #define LINKED_LIST
 
