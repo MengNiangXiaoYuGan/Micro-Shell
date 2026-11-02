@@ -38,6 +38,9 @@ extern"C"{
 
 
 /***********************************************typedef***************************** */
+
+typedef void Shell_Send_Data_t(char*, unsigned short);
+
 typedef struct
 {
     /*this is linked list for shell command, it could use for*/
@@ -49,7 +52,7 @@ typedef struct
     struct FIFO_buff_t fifo;
 
     /*it is send byte to out side api function*/
-    void (*terminal_send_message)(char *message,unsigned short size);
+    Shell_Send_Data_t *terminal_send_message;
 
     /*将这个替换成一个双向环形链表似乎会更好*/
     /*data cache for history*/
@@ -216,7 +219,8 @@ int Shell_Iint (Shell_Handle_t *shell, void (*send_data)(char *message,unsigned 
  * @param command
  * @return 0 is success
  * @return - is error
- * @note 注意，传入的是命令的指针，需要用SHELL_COMMAND_NAME进行名称到C结构体指针的转换
+ * @note 注意，传入的是命令的指针
+ *       该函数必须在Shell_Init调用后才能调用，否则会出现命令表回环无法遍历的情况
 */
 int Shell_Register_Command(Shell_Handle_t *shell,const Shell_Command_Typedef *command);
 

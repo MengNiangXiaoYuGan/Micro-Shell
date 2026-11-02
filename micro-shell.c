@@ -451,7 +451,7 @@ int Shell_Iint (Shell_Handle_t *shell,
  * @param command
  * @return 0 is success
  * @return - is error
- * @note 注意，传入的是命令的指针，需要用SHELL_COMMAND进行名称到C结构体指针的转换
+ * @note 注意，传入的是命令的指针
  *       该函数必须在Shell_Init调用后才能调用，否则会出现命令表回环无法遍历的情况
 */
 int Shell_Register_Command(Shell_Handle_t *shell,const Shell_Command_Typedef *command)
@@ -501,7 +501,7 @@ int Shell_Task (Shell_Handle_t *shell)
     unsigned char size = FIFO_pull_data(&shell->fifo, data, sizeof(data));
     if (size == 0)
     {
-        return -SHELL_BUSY;
+        return 0;
     }
 
     //start analyze
