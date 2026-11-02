@@ -62,7 +62,7 @@ int cmd_test (int argc,void *argv[])
     /*get shell handle*/
     Shell_Handle_t *shell = (Shell_Handle_t *)argv[0];
     /*get this command steurct*/
-    Shell_Command_Typedef *cmd = Shell_Serch_Command(shell, argv[1]);
+    const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell, argv[1]);
     /*get param list and num*/
     int param_num = Shell_Complite_Param_To_Num(cmd, argv[2]);
 
@@ -185,7 +185,7 @@ inline unsigned char Shell_get_Command_List_Size(Shell_Handle_t *shell)
 */
 int Shell_Foreach_Command(Shell_Handle_t *shell, Shell_Command_Typedef *command_list[])
 {
-    Linked_List_Node_Single_D_t *list[shell->command_num];
+    Linked_List_Node_t *list[shell->command_num];
     int ret = Linked_List_Foreach_Node(shell->Shell_command, list);
     if (ret != shell->command_num)
     {
@@ -204,9 +204,9 @@ int Shell_Foreach_Command(Shell_Handle_t *shell, Shell_Command_Typedef *command_
  * @param name
  * @return 命令结构的指针或者NULL
 */
-Shell_Command_Typedef* Shell_Serch_Command(Shell_Handle_t *shell, char* name)
+const Shell_Command_Typedef* Shell_Serch_Command(Shell_Handle_t *shell, char* name)
 {
-    Linked_List_Node_Single_D_t *list[shell->command_num];
+    Linked_List_Node_t *list[shell->command_num];
     int ret = Linked_List_Foreach_Node(shell->Shell_command, list);
     if (ret != shell->command_num)
     {
@@ -214,7 +214,7 @@ Shell_Command_Typedef* Shell_Serch_Command(Shell_Handle_t *shell, char* name)
     }
     for (unsigned short i = 0; i < shell->command_num; i++)
     {
-        Shell_Command_Typedef *cmd = (Shell_Command_Typedef *)list[i]->data;
+        const Shell_Command_Typedef *cmd = (const Shell_Command_Typedef *)list[i]->data;
         if (strcmp(name,cmd->name) == 0)
         {
             return cmd;
@@ -231,7 +231,7 @@ Shell_Command_Typedef* Shell_Serch_Command(Shell_Handle_t *shell, char* name)
  * @return - is error
  * @note 该函数为用户可以直接在自定义命令里使用的辅助函数，通过判断返回的值，即可知道传入的次级参数是什么
 */
-int Shell_Complite_Param_To_Num(Shell_Command_Typedef *cmd, char *param)
+int Shell_Complite_Param_To_Num(const Shell_Command_Typedef *cmd, char *param)
 {
     const Shell_Param_Typedef *param_list = cmd->params;
     int ret  = 0;
@@ -456,7 +456,7 @@ int Shell_Iint (Shell_Handle_t *shell,
 */
 int Shell_Register_Command(Shell_Handle_t *shell,const Shell_Command_Typedef *command)
 {
-    Linked_List_Node_Single_D_t *ptr = Linked_List_Node_Init((void *)command);
+    Linked_List_Node_t *ptr = Linked_List_Node_Init((void *)command, command->param_num * sizeof(Shell_Param_Typedef));
     if (NULL == ptr)
     {
         return -SHELL_NO_MEM;
@@ -594,7 +594,7 @@ int Shell_Task (Shell_Handle_t *shell)
             params[0] = (void *)shell;
             short params_number = Terminal_Get_Param(shell->data_cache[shell->cache_group_number]," ",&params[1],SHELL_MAX_PARAM_NUMBER);
             //search functuin
-            Shell_Command_Typedef *cmd = Shell_Serch_Command(shell,(char *)params[1]);
+            const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell,(char *)params[1]);
             int ret = 0;
             if (NULL == cmd)
             {

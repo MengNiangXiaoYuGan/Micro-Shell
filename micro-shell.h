@@ -15,6 +15,8 @@ extern"C"{
 #include "./fifo/fifo.h"
 #include "./linked-list/linked-list.h"
 
+/********************************SETTINGS************************************** */
+
 /*Max cache size*/
 #define SHELL_MAX_LEN               64
 
@@ -30,14 +32,18 @@ extern"C"{
 /*Host name default*/
 #define SHELL_HOST_NAME "root"
 
+
+
+
+
+
+/**********************************DEFINE*************************************** */
+
 #define    SHELL_ERROR      1
 #define    SHELL_BUSY       2
 #define    SHELL_OVER_RANGE 4
 #define    SHELL_NO_FETCH    5
 #define    SHELL_NO_MEM     6
-
-
-/***********************************************typedef***************************** */
 
 typedef void Shell_Send_Data_t(char*, unsigned short);
 
@@ -46,7 +52,7 @@ typedef struct
     /*this is linked list for shell command, it could use for*/
     /*register command form external function and file, it usefor*/
     /*for uncrach this lib to orther files*/
-    Linked_List_Node_Single_D_t *Shell_command;
+    Linked_List_Node_t *Shell_command;
 
     /*it is fifo for get data*/
     struct FIFO_buff_t fifo;
@@ -189,7 +195,7 @@ int Shell_Foreach_Command(Shell_Handle_t *shell, Shell_Command_Typedef *command_
  * @param name 命令名称的字符串
  * @return 命令结构的指针或者NULL
 */
-Shell_Command_Typedef* Shell_Serch_Command(Shell_Handle_t *shell, char* name);
+const Shell_Command_Typedef* Shell_Serch_Command(Shell_Handle_t *shell, char* name);
 
 /*
  * @brief 该函数用于获取参数的顺序值，用于匹配次级参数
@@ -199,7 +205,7 @@ Shell_Command_Typedef* Shell_Serch_Command(Shell_Handle_t *shell, char* name);
  * @return - is error
  * @note 该函数为用户可以直接在自定义命令里使用的辅助函数，通过判断返回的值，即可知道传入的次级参数是什么
 */
-int Shell_Complite_Param_To_Num(Shell_Command_Typedef *cmd, char *param);
+int Shell_Complite_Param_To_Num(const Shell_Command_Typedef *cmd, char *param);
 
 /******************************************API FUNCTION********************************************* */
 
