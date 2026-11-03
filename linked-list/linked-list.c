@@ -28,7 +28,6 @@ Linked_List_Node_t* Linked_List_Node_Init(void *data_ptr, int size)
         return NULL;
     }
     ret->next_node = NULL;
-    ret->prev_node = NULL;
     ret->data = data_ptr;
     ret->size = size;
     return ret;
@@ -77,7 +76,6 @@ Linked_List_Node_t* Linked_List_Add_Head(Linked_List_Node_t *node,
         Linked_List_Node_t *new_node)
 {
     new_node->next_node = (void *)node;
-    node->prev_node = (void *)new_node;
     return new_node;
 }
 
@@ -99,7 +97,6 @@ Linked_List_Node_t* Linked_List_Add_Tail(Linked_List_Node_t *node,
     }
     ret++;
     ptr->next_node = new_node;
-    new_node->prev_node = (void *)ptr;
     return node;
 }
 

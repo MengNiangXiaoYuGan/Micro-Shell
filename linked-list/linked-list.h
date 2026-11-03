@@ -6,7 +6,9 @@
 */
 
 /*
- * 该库实现了双向，非循环链表的创建，头插，尾插，整体删除的功能
+ * 该库实现了单向，非循环链表的创建，头插，尾插，整体删除的功能
+ * 请注意，为了节省空间，该链表库做了特殊修改，虽然可以移植，但是
+ * 会出现浪费内存的现象
  * 双向链表可以直接当作单向链表使用，只要不去在意prev_node即可
 */
 
@@ -19,7 +21,6 @@ typedef struct Linked_List_Node_t
     struct Linked_List_Node_t *next_node;       /*next node addr*/
     void *data;                                 /*this node data*/
     int size;                                   /*this is node data size (option)*/
-    struct Linked_List_Node_t *prev_node;       /*next node addr*/
 }Linked_List_Node_t;
 
 /*

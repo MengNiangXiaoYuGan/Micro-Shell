@@ -14,14 +14,15 @@ extern"C"{
 
 #include "./fifo/fifo.h"
 #include "./linked-list/linked-list.h"
+// #include "./cache/cache.h"
 
 /********************************SETTINGS************************************** */
 
-/*Max cache size*/
-#define SHELL_MAX_LEN               64
+/*Max History cache size*/
+#define SHELL_CACHE_HISTORY         256 /*bytes*/
 
-/*Max history number*/
-#define SHELL_CACHE_DEEP            5
+/*Max Cache buff size*/
+#define SHELL_CACHE_DEEP            64  /*bytes*/
 
 /*Max param num*/
 #define SHELL_MAX_PARAM_NUMBER      6
@@ -42,36 +43,48 @@ extern"C"{
 #define    SHELL_ERROR      1
 #define    SHELL_BUSY       2
 #define    SHELL_OVER_RANGE 4
-#define    SHELL_NO_FETCH    5
+#define    SHELL_NO_FETCH   5
 #define    SHELL_NO_MEM     6
+#define SHELL_OUT_OF_CACH   7
 
 typedef void Shell_Send_Data_t(char*, unsigned short);
 
 typedef struct
 {
+    /*it is fifo for get data*/
+    struct FIFO_buff_t fifo;
+
+    /*this use for storage history entry*/
+    unsigned int history_entry;
+
+    /*this use for how many size of history can use*/
+    unsigned int history_size_limit;
+
+    /*this use for flag how many size history used*/
+    unsigned int history_size;
+
+    /*this linked list use for storage history*/
+    Linked_List_Node_t *history;
+
+    /*input table size*/
+    unsigned int cache_size;
+
+    /*retun value save*/
+    int ret;
+
     /*this is linked list for shell command, it could use for*/
     /*register command form external function and file, it usefor*/
     /*for uncrach this lib to orther files*/
     Linked_List_Node_t *Shell_command;
 
-    /*it is fifo for get data*/
-    struct FIFO_buff_t fifo;
-
     /*it is send byte to out side api function*/
     Shell_Send_Data_t *terminal_send_message;
 
-    /*将这个替换成一个双向环形链表似乎会更好*/
-    /*data cache for history*/
-    char data_cache[SHELL_CACHE_DEEP][SHELL_MAX_LEN];
-
-    /*one line cache data num*/
-    unsigned char data_conter[SHELL_CACHE_DEEP];
+    /*input table cache*/
+    char cache_buff[SHELL_CACHE_DEEP];
 
     /*host name*/
     char host_name[SHELL_MAX_HOST_NAME_LEN];
-
-    /*how many now used cache grop*/
-    unsigned char cache_group_number;
 
     /*use for mulit key like direction key and esc or ctrl key*/
     unsigned char mulit_key_status;

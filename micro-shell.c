@@ -27,10 +27,17 @@
 #define ANSI_COLOR_WHT   "\x1B[37m"
 #define ANSI_COLOR_RESET "\x1B[0m"
 
-#define SHELL_DISPALY_HEAD(x)       Terminal_Print((x),ANSI_FONT_BOLD ANSI_COLOR_MAG"%s" ANSI_COLOR_RESET " ->", (x)->host_name)
-#define SHELL_HEAD(x,string)        Terminal_Print((x),ANSI_FONT_BOLD ANSI_COLOR_MAG"%s" ANSI_COLOR_RESET " ->%s", (x)->host_name, (string))
-#define SHELL_BACK_TO_HEAD(x)       Terminal_Print((x),"\r\033[K")
-#define SHELL_DISPLAY_RET(x, ret)   Terminal_Print((x), "%s%d "ANSI_COLOR_RESET, (ret) == 0 ? ANSI_COLOR_GRN : ANSI_COLOR_RED, (ret));
+#define ANSI_NONE        ""
+#define ANSI_END_CODE    '\0'
+
+#define SHELL_HEAD(x,ret,string)        Terminal_Print((x),"%s%d "ANSI_COLOR_RESET ANSI_FONT_BOLD ANSI_COLOR_MAG"%s" ANSI_COLOR_RESET "->%s",   \
+                                    (ret) == 0 ? ANSI_COLOR_GRN : ANSI_COLOR_RED,                                                               \
+                                    (ret),                                                                                                      \
+                                    (x)->host_name,                                                                                             \
+                                    (string))
+
+#define SHELL_BACK_TO_HEAD(x)       Terminal_Print((x), "\r\033[K")
+#define SHELL_BACK_SPACE(x)         Terminal_Print((x), "\b \b")
 
 #define SHELL_HELLO_INTERFACE(x)    \
         Terminal_Print((x), "*******************************************************\r\n"\
@@ -40,10 +47,6 @@
 #define SHELL_NEW_LINE(x)           Terminal_Print((x),"\r\n")
 #define SHELL_CLEAN_SCREEN(x)       Terminal_Print((x),"\033[H\033[2J")
 
-#define SHELL_OUT_OF_CACH(x)        \
-        Terminal_Print((x), "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\r\n"\
-                            "cache is full!! change your cache size or change your command to fix it \r\n"\
-                            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\r\n")
 
 #define SHELL_INF(x,...)            Terminal_Print((x),ANSI_COLOR_GRN "<inf> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
 #define SHELL_ERR(x,...)            Terminal_Print((x),ANSI_COLOR_RED "<err> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
@@ -174,6 +177,80 @@ static short Terminal_Get_Param(char *message,
 inline unsigned char Shell_get_Command_List_Size(Shell_Handle_t *shell)
 {
     return shell->command_num;
+}
+
+/*
+ * @brief 该函数用于归档历史记录
+ * @param shell
+ * @return 0 is success
+ * @return nagetive history linked list have loop
+*/
+int Shell_Archive_History (Shell_Handle_t *shell)
+{
+    /*check cache limit*/
+    while (shell->cache_size > shell->history_size_limit - shell->history_size)
+    {
+        /*kill most older history*/
+        Linked_List_Node_t *node = shell->history;
+        Linked_List_Node_t *start = node;
+        while (NULL != node->next_node->next_node)
+        {
+            node = node->next_node;
+            if (node->next_node == start)
+            {
+                return -SHELL_ERROR;
+            }
+        }
+        free(node->next_node->data);
+        shell->cache_size -= node->next_node->size;
+        free(node->next_node);
+        node->next_node = NULL;
+    }
+    /*archive this buff*/
+    void *buff_ptr = malloc(shell->cache_size);
+    if (NULL == buff_ptr)
+    {
+       return -SHELL_NO_MEM;
+    }
+    memcpy(buff_ptr, shell->cache_buff, shell->cache_size);
+    Linked_List_Node_t *his = Linked_List_Node_Init(buff_ptr, shell->cache_size);
+    shell->history = Linked_List_Add_Head(shell->history, his);
+
+    /*reset buff*/
+    memset(shell->cache_buff, ANSI_END_CODE, sizeof(shell->cache_buff));
+    shell->cache_size = 0;
+    return 0;
+}
+
+/*
+ * @brief 该函数按照深度获取历史记录
+ * @param shell
+ * @param data
+ * @param deep 历史记录深度，0为第一条buff
+ * @return >= 0 is count of data size
+ * @return -n is error code
+ */
+int Shell_get_history_by_index(Shell_Handle_t *shell, void **data, unsigned int deep)
+{
+    Linked_List_Node_t *ptr = shell->history;
+    if (NULL == ptr)
+    {
+        return -SHELL_BUSY;
+    }
+    
+    for (unsigned int i = 0; i < deep; i++)
+    {
+        if (NULL != ptr->next_node)
+        {
+            ptr = ptr->next_node;
+        }
+        else
+        {
+            return -SHELL_NO_FETCH;
+        }
+    }
+    *data = ptr->data;
+    return ptr->size;
 }
 
 /*
@@ -328,43 +405,54 @@ static int Terminal_Function_Complite (Shell_Handle_t *shell,
 static int Terminal_ESC_Mulit_Byte_Anlayze (Shell_Handle_t *shell,
         char data)
 {
-    switch (shell->mulit_key_status)
+    char *data_buf = NULL;
+    if (data == 0x1b)                    //esc is pushed
     {
-    case 0:
-        if (data == 0x1b)                    //esc is pushed
-        {
-            shell->mulit_key_status = 1;
-            shell->data_cache[shell->cache_group_number][shell->data_conter[shell->cache_group_number]] = '\0';
-        }
-        return SHELL_BUSY;
-        break;
-    case 1:
-        /*mulit key conferm*/
-        /*stage 1 [*/
-        if (data == 0x5b)
-        {
-            shell->mulit_key_status = 2;
-            shell->data_cache[shell->cache_group_number][shell->data_conter[shell->cache_group_number]] = '\0';
-        }
-        else
-        {
-            shell->mulit_key_status = 0;
-            break;
-        }
+        shell->mulit_key_status = 1;
         return -SHELL_BUSY;
-    case 2:
-        /*stage 2 */
+    }
+    else if (data == 0x5b && shell->mulit_key_status == 1)
+    {
+        shell->mulit_key_status = 2;
+        return -SHELL_BUSY;
+    }
+    else if (shell->mulit_key_status == 2)
+    {
+        unsigned int tmp_entry = shell->history_entry;
         switch (data)
         {
         case 'A':          //up bottom
+            if (tmp_entry <= 65536)
+            {
+                tmp_entry++;
+            }
+            /*display history*/
+            if (Shell_get_history_by_index(shell, (void *)&data_buf, tmp_entry - 1) < 0)
+            {
+                return -SHELL_NO_FETCH;
+            }
             SHELL_BACK_TO_HEAD(shell);
-            if(shell->cache_group_number < SHELL_CACHE_DEEP - 1)shell->cache_group_number++;
-            SHELL_HEAD(shell, &shell->data_cache[shell->cache_group_number]);
+            SHELL_HEAD(shell, shell->ret, data_buf);
             break;
         case 'B':          //dowm bottom
+            if (tmp_entry <= 1)
+            {
+                /*display buff*/
+                SHELL_BACK_TO_HEAD(shell);
+                SHELL_HEAD(shell, shell->ret, shell->cache_buff);
+                break;
+            }
+            else
+            {
+                tmp_entry--;
+            }
+            /*display history*/
+            if (Shell_get_history_by_index(shell, (void *)&data_buf, tmp_entry - 1) < 0)
+            {
+                return -SHELL_NO_FETCH;
+            }
             SHELL_BACK_TO_HEAD(shell);
-            if(shell->cache_group_number > 0)shell->cache_group_number--;
-            SHELL_HEAD(shell, &shell->data_cache[shell->cache_group_number]);
+            SHELL_HEAD(shell, shell->ret, data_buf);
             break;
         case 'C':          //right bottom
             // Terminal_Print(hfoc,"right\r\n");
@@ -373,11 +461,16 @@ static int Terminal_ESC_Mulit_Byte_Anlayze (Shell_Handle_t *shell,
             // Terminal_Print(hfoc,"left\r\n");
             break;
         default:
+            shell->mulit_key_status = 0;
             break;
         }
-    default:
+        shell->history_entry = tmp_entry;
         shell->mulit_key_status = 0;
-        break;
+        return 1;
+    }
+    else
+    {
+        shell->mulit_key_status = 0;
     }
     return 0;
 }
@@ -399,23 +492,30 @@ int Shell_Iint (Shell_Handle_t *shell,
         return -SHELL_ERROR;
     }
     shell->terminal_send_message = send_data;
+
     /*init data cache*/
     strncpy(shell->host_name, SHELL_HOST_NAME, sizeof(SHELL_HOST_NAME));
-    shell->cache_group_number = 0;
-    memset(shell->data_cache, 0, sizeof(shell->data_cache));
-    memset(shell->data_conter, 0, sizeof(shell->data_conter));
+    memset(shell->cache_buff, ANSI_END_CODE, sizeof(shell->cache_buff));
+    shell->cache_size = 0;
+
+    /*init history*/
+    shell->history_entry = 0;
+    shell->history = NULL;
+    shell->history_size_limit = SHELL_CACHE_HISTORY;
+    shell->history_size = 0;
 
     /*init fifo*/
-    if (FIFO_CREATE_MALLOC(&shell->fifo, SHELL_MAX_LEN))
+    if (FIFO_CREATE_MALLOC(&shell->fifo, SHELL_CACHE_DEEP/2))
     {
         SHELL_ERR(shell, "no memory to give fifo");
         return -SHELL_NO_MEM;
     }
 
     /*init screen*/
+    shell->ret = 0;
     SHELL_CLEAN_SCREEN(shell);
     SHELL_HELLO_INTERFACE(shell);
-    SHELL_DISPALY_HEAD(shell);
+    SHELL_HEAD(shell,shell->ret,ANSI_NONE);
     shell->mulit_key_status = 0;
 
     /*register command*/
@@ -496,124 +596,94 @@ int Shell_push_data(Shell_Handle_t *shell,
 */
 int Shell_Task (Shell_Handle_t *shell)
 {
-    char data[32] = {0};
-    /*可能这个临时存储器得去掉,直接用cache当存储器*/
-    unsigned char size = FIFO_pull_data(&shell->fifo, data, sizeof(data));
+    char data[2];
+    unsigned char size = FIFO_pull_data(&shell->fifo, data, 1);
     if (size == 0)
     {
         return 0;
     }
 
-    //start analyze
-    unsigned char end_code = 0;
-    for (unsigned char i = 0; i < size; i++)
+    /*check mulite input like up down key*/
+    if (Terminal_ESC_Mulit_Byte_Anlayze(shell, data[0]))
     {
-        if(shell->data_conter[shell->cache_group_number] > sizeof(shell->data_cache[shell->cache_group_number]))
-        {
-            //cache is boom
-            shell->data_conter[shell->cache_group_number] = 0;
-            SHELL_NEW_LINE(shell);
-            SHELL_OUT_OF_CACH(shell);
-            SHELL_DISPALY_HEAD(shell);
-            return -SHELL_ERROR;
-        }
-        shell->data_cache[shell->cache_group_number][shell->data_conter[shell->cache_group_number]] = data[i];
-
-        /*clean reciver*/
-        if (Terminal_ESC_Mulit_Byte_Anlayze(shell, data[i]) == 0)
-        {
-            /*这里有问题,不能这样清*/
-            for (unsigned short clean = 0; clean < size - i; clean++)
-            {
-                data[clean] = 0;
-            }
-            continue;
-        }
-
-        switch (data[i])                //fine speshel key
-        {
-        case 0x08:
-        case 0x7f:                      //back space or delate
-            if (shell->data_conter[shell->cache_group_number] > 0)
-            {
-            shell->data_cache[shell->cache_group_number][shell->data_conter[shell->cache_group_number]] = '\0';
-            shell->data_conter[shell->cache_group_number] --;
-            }
-            else
-            {
-                return -SHELL_BUSY;
-            }
-            break;
-        case 0x09:                      //tab is be pushed haha
-            shell->data_cache[shell->cache_group_number][shell->data_conter[shell->cache_group_number]] = '\0';
-            Terminal_Function_Complite(shell, 
-                    shell->data_cache[shell->cache_group_number],
-                    shell->data_conter[shell->cache_group_number]);
-            SHELL_HEAD(shell,shell->data_cache);
-            return -SHELL_BUSY;
-            break;
-        case 0x10:
-        case 0x0d:                      //enter or shift enter
-            shell->data_cache[shell->cache_group_number][shell->data_conter[shell->cache_group_number]] = '\0';
-            end_code = 1;
-            SHELL_NEW_LINE(shell);
-            break;
-            break;
-        case 0x1b:                      //esc is pushed
-            break;
-        default:                        //notthing juet nomal data
-            shell->data_conter[shell->cache_group_number] ++;
-            break;
-        }
+        return 0;
     }
 
-    if(end_code)    //cache is a complere message
+    switch (data[0])                //fine speshel key
     {
-        if(shell->data_conter[shell->cache_group_number])
+    case 0x08:
+    case 0x7f:                      //back space or delate
+        /*delete form cache*/
+        if (shell->cache_size > 0)
         {
-            //rotate cache to histiory
-            if (shell->cache_group_number)           //user history
-            {
-                for (unsigned short copy_number = 0; copy_number < SHELL_MAX_LEN; copy_number++)
-                {
-                    shell->data_cache[0][copy_number] = shell->data_cache[shell->cache_group_number][copy_number];
-                }
-                shell->data_conter[0] = shell->data_conter[shell->cache_group_number];
-                shell->cache_group_number = 0;
-            }
-            for (unsigned short push_number = SHELL_CACHE_DEEP-1; push_number > 0; push_number--)    //rolling history
-            {
-                for (unsigned short copy_number = 0; copy_number < SHELL_MAX_LEN; copy_number++)
-                {
-                    shell->data_cache[push_number][copy_number] = shell->data_cache[push_number - 1][copy_number];
-                }
-                shell->data_conter[push_number] = shell->data_conter[push_number - 1];
-            }
-            //dilime params
-            void *params[SHELL_MAX_PARAM_NUMBER + 1];
-            params[0] = (void *)shell;
-            short params_number = Terminal_Get_Param(shell->data_cache[shell->cache_group_number]," ",&params[1],SHELL_MAX_PARAM_NUMBER);
-            //search functuin
-            const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell,(char *)params[1]);
-            int ret = 0;
-            if (NULL == cmd)
-            {
-                Terminal_Print(shell, "%s : can`t not fine command\r\n",params[1]);
-                ret = -SHELL_NO_FETCH;
-            }
-            else
-            {
-                ret = cmd->terminal_function(params_number,params);
-            }
-            SHELL_DISPLAY_RET(shell, ret);
-            shell->data_conter[shell->cache_group_number] = 0;
+            shell->cache_size--;
+            shell->cache_buff[shell->cache_size] = ANSI_END_CODE;
+            SHELL_BACK_SPACE(shell);
         }
-        //anthe loop steart
-        SHELL_DISPALY_HEAD(shell);
+        return -SHELL_BUSY;
+        break;
+    case 0x09:                      //tab is be pushed haha
+        Terminal_Function_Complite(shell,
+                shell->cache_buff,
+                shell->cache_size);
+        SHELL_HEAD(shell, shell->ret, shell->cache_buff);
+        return -SHELL_BUSY;
+        break;
+    case 0x10:
+    case 0x0d:                      //enter or shift enter
+        shell->cache_buff[shell->cache_size] = ANSI_END_CODE;
+        shell->cache_size++;
+        SHELL_NEW_LINE(shell);
+        /*only this option can continue nest stage*/
+        break;
+    case 0x1b:                      //esc is pushed
+        return -SHELL_NO_FETCH;
+        break;
+    default:                        //notthing juet nomal data
+        /*save to cache buff*/
+        if (shell->cache_size < sizeof(shell->cache_buff))
+        {
+            shell->cache_buff[shell->cache_size] = data[0];
+            shell->cache_size++;
+            Terminal_Print(shell, "%s", data);
+            return 0;
+        }
+        else return -SHELL_OUT_OF_CACH;
+        break;
+    }
+
+    /*now checke command*/
+    /*get buff*/
+    if(shell->cache_size > 1)
+    {
+        //dilime params
+        void *params[SHELL_MAX_PARAM_NUMBER + 1];
+        params[0] = (void *)shell;
+        short params_number = Terminal_Get_Param(shell->cache_buff, " ", &params[1], SHELL_MAX_PARAM_NUMBER);
+        //search functuin
+        const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell,(char *)params[1]);
+        if (NULL == cmd)
+        {
+            Terminal_Print(shell, "%s : can`t not fine command\r\n",params[1]);
+            shell->ret = -SHELL_NO_FETCH;
+        }
+        else
+        {
+            shell->ret = cmd->terminal_function(params_number,params);
+        }
+        //archive cache to histiory
+        if (Shell_Archive_History(shell) < 0)
+        {
+            SHELL_ERR(shell, "cache history is loop or memory out");
+        }
     }
     else
     {
-        Terminal_Print(shell, "%s",data);
+        shell->ret = 0;
+        shell->cache_size = 0;
     }
+    //anthe loop steart
+    shell->history_entry = 0;
+    SHELL_HEAD(shell, shell->ret, ANSI_NONE);
     return 0;
 }
