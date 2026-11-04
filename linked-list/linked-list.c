@@ -18,10 +18,10 @@
  * @param data_ptr 数据的指针
  * @return 链表的指针或者NULL
 */
-Linked_List_Node_Single_D_t* Linked_List_Node_Init(void *data_ptr)
+Linked_List_Node_t* Linked_List_Node_Init(void *data_ptr, int size)
 {
-    Linked_List_Node_Single_D_t *ret = 
-        (Linked_List_Node_Single_D_t *)malloc(sizeof(Linked_List_Node_Single_D_t));
+    Linked_List_Node_t *ret = 
+        (Linked_List_Node_t *)malloc(sizeof(Linked_List_Node_t));
 
     if (NULL == ret)
     {
@@ -29,6 +29,7 @@ Linked_List_Node_Single_D_t* Linked_List_Node_Init(void *data_ptr)
     }
     ret->next_node = NULL;
     ret->data = data_ptr;
+    ret->size = size;
     return ret;
 }
 
@@ -39,17 +40,17 @@ Linked_List_Node_Single_D_t* Linked_List_Node_Init(void *data_ptr)
  * @return 节点总数
  * @return - is error code
 */
-int Linked_List_Foreach_Node (Linked_List_Node_Single_D_t *node, 
-        Linked_List_Node_Single_D_t *node_list[])
+int Linked_List_Foreach_Node (Linked_List_Node_t *node, 
+        Linked_List_Node_t *node_list[])
 {
     int ret = 0;
-    Linked_List_Node_Single_D_t *ptr = node;
+    Linked_List_Node_t *ptr = node;
     /*To prevent a linked list loop, 
         use an extra pointer to indicate 
         that if during traversal the next 
         node is the same as the current node,
         return the size.*/
-    const Linked_List_Node_Single_D_t *start = ptr;
+    const Linked_List_Node_t *start = ptr;
     node_list[ret] = ptr;
     while (NULL != ptr->next_node)
     {
@@ -71,8 +72,8 @@ int Linked_List_Foreach_Node (Linked_List_Node_Single_D_t *node,
  * @param new_node 新的节点
  * @return 新的节点的指针作为头
 */
-Linked_List_Node_Single_D_t* Linked_List_Add_Head(Linked_List_Node_Single_D_t *node,
-            Linked_List_Node_Single_D_t *new_node)
+Linked_List_Node_t* Linked_List_Add_Head(Linked_List_Node_t *node,
+        Linked_List_Node_t *new_node)
 {
     new_node->next_node = (void *)node;
     return new_node;
@@ -84,10 +85,10 @@ Linked_List_Node_Single_D_t* Linked_List_Add_Head(Linked_List_Node_Single_D_t *n
  * @param node_new 需要拼接在尾部的链表节点的指针
  * @return 链表的头指针
 */
-Linked_List_Node_Single_D_t* Linked_List_Add_Tail(Linked_List_Node_Single_D_t *node, 
-        Linked_List_Node_Single_D_t *new_node)
+Linked_List_Node_t* Linked_List_Add_Tail(Linked_List_Node_t *node, 
+        Linked_List_Node_t *new_node)
 {
-    Linked_List_Node_Single_D_t *ptr = node;
+    Linked_List_Node_t *ptr = node;
     int ret = 1;
     while(NULL != ptr->next_node)
     {
@@ -104,16 +105,21 @@ Linked_List_Node_Single_D_t* Linked_List_Add_Tail(Linked_List_Node_Single_D_t *n
  * @param node 链表头
  * @return 删除链表节点的数量
 */
-int Linked_List_Distory_All_List(Linked_List_Node_Single_D_t *node)
+int Linked_List_Distory_All_List(Linked_List_Node_t *node)
 {
     int ret = 0;
-    Linked_List_Node_Single_D_t *ptr = node;
+    Linked_List_Node_t *ptr = node;
+    const Linked_List_Node_t *start = ptr;
     while (NULL != ptr->next_node)
     {
         ret++;
-        Linked_List_Node_Single_D_t *del_ptr = ptr;
+        Linked_List_Node_t *del_ptr = ptr;
         ptr = ptr->next_node;
         free(del_ptr);
+        if (ptr == start)
+        {
+            break;
+        }
     }
     ret++;
     free(ptr);
