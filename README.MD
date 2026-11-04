@@ -116,7 +116,7 @@ int cmd_led (int argc, void *arg[])
   Shell_Handle_t *shell = (Shell_Handle_t *)argv[0];
   /*get this command steurct*/
   /*can use while or for to foreach all param grup*/
-  Shell_Command_Typedef *cmd = Shell_Serch_Command(shell, argv[1]);
+  const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell, argv[1]);
   /*get param list and num*/
   int param_num = Shell_Complite_Param_To_Num(cmd, argv[2]);
   switch(param_num)
@@ -125,18 +125,7 @@ int cmd_led (int argc, void *arg[])
       /*the number 0 param target must is help*/
       /*call *cmd* --help or *cmd* -h to trigger it*/
       /*can put any wont to display function of help on there*/
-      Terminal_Print(shell, "%s\r\n"
-                            "%s\r\n"
-                            "         %s    %s    %s\r\n"
-                            "         %s    %s    %s\r\n",
-                            cmd->name,
-                            cmd->params[0].help,
-                            cmd->params[1].full_name,
-                            cmd->params[1].nick_name,
-                            cmd->params[1].help,
-                            cmd->params[2].full_name,
-                            cmd->params[2].nick_name,
-                            cmd->params[2].help);
+      Shell_Display_Command_Help(shell, cmd);
       break;
     case 1:
       if (led_status != 0) return 2;
