@@ -85,10 +85,7 @@ int cmd_test (int argc,void *argv[])
     else if (param_num == 0)    /*is the fix param of "--help" or "-h"*/
     {
         /*can put any wont to display function of help on there*/
-        Terminal_Print(shell, "%-16s%-16s%-24s\r\n", 
-            cmd->params[param_num].full_name, 
-            cmd->params[param_num].nick_name, 
-            cmd->params[param_num].help);
+        Shell_Display_Command_Help(shell, cmd);
     }
     return 0;
 }
@@ -335,6 +332,33 @@ int Shell_Complite_Param_To_Num(const Shell_Command_Typedef *cmd, char *param)
     return ret;
 }
 
+/*
+ * @brief 该函数用于显示命令的帮助，由于定义命令的时候会默认定义一个--help以及-h的参数
+ *        ，当用户不想为编写help处理函数段的时候，这个函数可以提供一个标准并且格式化的
+ *        显示方案，同时，这个函数在输入完整命令的情况下，敲击tab键，就会触发，显示当前
+ *        命令的帮助文档。
+ * @param shell
+ * @param cmd
+ * @return 0
+ * @note 该命令的执行结果会在shell上打印如下的内容,以名称为cmd，并且有两个自定义参数的
+ *       自定义命令为例：
+ *          cmd         this is cmd help
+ *                  --help      -h      use for display informations
+ *                  --load      -l      load settings
+ *                  --save      -s      save settings
+*/
+int Shell_Display_Command_Help (Shell_Handle_t *shell, const Shell_Command_Typedef *cmd)
+{
+    Terminal_Print(shell, "%-12s %s\r\n", cmd->name, cmd->params[0].help);
+    Terminal_Print(shell, "params : \r\n");
+    Terminal_Print(shell, "%-8d%-12s %-12s %s\r\n", 0, cmd->params[0].full_name, cmd->params[0].nick_name, "use for display help informations");
+    for (unsigned char i = 1; i < cmd->param_num; i++)
+    {
+        Terminal_Print(shell, "%-8d%-12s %-8s %s\r\n", i, cmd->params[i].full_name, cmd->params[i].nick_name, cmd->params[i].help);
+    }
+    return 0;
+}
+
 //自动补全(只完成了关联搜索，不会自动修改当前补全档)
 /*
  * @brief 该函数用于进行函数补全，并且在下方显示出来，该函数不会修改当前缓冲区内的数据
@@ -366,25 +390,45 @@ static int Terminal_Function_Complite (Shell_Handle_t *shell,
     }
     if(cache_size)
     {
+        const Shell_Command_Typedef *tmp_cmd = Shell_Serch_Command(shell, (char *)params[0]);
         //search name
         char shot = 0;
         if (param_number > 1)
         {
-
-        }
-        else 
-        {
-            for (unsigned short i = 0; i < shell->command_num; i++)
+            /*complite params*/
+            if (tmp_cmd == NULL) return -SHELL_NO_FETCH;
+            for (unsigned int  i = 0; i < tmp_cmd->param_num; i++)
             {
-                if (strncmp((char *)params[0],command_list[i]->name,strlen((char *)params[0])) == 0)
+                if (strncmp(tmp_cmd->params[i].full_name, (char *)params[param_number - 1], strlen((char *)params[param_number -1])) == 0 ||
+                        strncmp(tmp_cmd->params[i].nick_name,(char *)params[param_number - 1], strlen((char *)params[param_number -1])) == 0)
                 {
-                    Terminal_Print(shell,"%-8s ",command_list[i]->name);
-                    shot = 1;
+                    /*print params and helps*/
+                    Terminal_Print(shell, "%-8d%-12s %-8s %s\r\n", i, tmp_cmd->params[i].full_name, tmp_cmd->params[i].nick_name, tmp_cmd->params[i].help);
+                    shot++;
                 }
+            }
+        }
+        else
+        {
+            /*foreach command loke full complte*/
+            if (tmp_cmd == NULL)
+            {
+                /*only one param number mens one full complet or half compliet*/
+                for (unsigned short i = 0; i < shell->command_num; i++)
+                {
+                    if (strncmp((char *)params[0],command_list[i]->name,strlen((char *)params[0])) == 0)
+                    {
+                        Terminal_Print(shell,"%-8s ",command_list[i]->name);
+                        shot++;
+                    }
+                }
+            }
+            else
+            {
+                Shell_Display_Command_Help(shell, tmp_cmd);
             }
             SHELL_NEW_LINE(shell);
         }
-        
         if(!shot) return -SHELL_NO_FETCH;
     }
     else
