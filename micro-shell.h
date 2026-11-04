@@ -223,6 +223,23 @@ const Shell_Command_Typedef* Shell_Serch_Command(Shell_Handle_t *shell, char* na
 */
 int Shell_Complite_Param_To_Num(const Shell_Command_Typedef *cmd, char *param);
 
+/*
+ * @brief 该函数用于显示命令的帮助，由于定义命令的时候会默认定义一个--help以及-h的参数
+ *        ，当用户不想为编写help处理函数段的时候，这个函数可以提供一个标准并且格式化的
+ *        显示方案，同时，这个函数在输入完整命令的情况下，敲击tab键，就会触发，显示当前
+ *        命令的帮助文档。
+ * @param shell
+ * @param cmd
+ * @return 0
+ * @note 该命令的执行结果会在shell上打印如下的内容,以名称为cmd，并且有两个自定义参数的
+ *       自定义命令为例：
+ *          cmd         this is cmd help
+ *                  --help      -h      use for display help informations
+ *                  --load      -l      load settings
+ *                  --save      -s      save settings
+*/
+int Shell_Display_Command_Help (Shell_Handle_t *shell, const Shell_Command_Typedef *cmd);
+
 /******************************************API FUNCTION********************************************* */
 
 /*
