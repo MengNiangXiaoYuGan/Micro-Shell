@@ -69,27 +69,92 @@ int cmd_test (int argc,void *argv[])
     /*get this command steurct*/
     const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell, argv[1]);
     /*get param list and num*/
-    int param_num = Shell_Complite_Param_To_Num(cmd, argv[2]);
 
-    if (param_num < 0)  /*get not fetch any param*/
+    for (int i = 2; i <= argc; i++)
     {
-        unsigned int i;
-        Terminal_Print (shell, "argc=%d ",argc);
-        Terminal_Print (shell, "argv = [");
-        for (i = 1; i < argc; i++)
+        int param_num = Shell_Complite_Param_To_Num(cmd, argv[2]);
+        switch (param_num)
         {
-            Terminal_Print(shell, "%s, ",(char *)argv[i]);
+        case 0:
+            /*display help information*/
+            Shell_Display_Command_Help(shell, cmd);
+            return 0;
+            break;
+        case 1:
+            if (i + 1 <= argc)
+            {
+                i++;
+                long int emp = 0;
+                if (Shell_Conversion_Str_to_Int(argv[i], &emp) < 0)
+                {
+                    SHELL_ERR(shell, "cannot vovertion this params");
+                    return -SHELL_NO_FETCH;
+                }
+                Terminal_Print(shell, "conversion value is %ld\r\n", emp);
+            }
+            else
+            {
+                SHELL_ERR(shell, "not more argument");
+                return -SHELL_NO_FETCH;
+            }
+            break;
+        case 2:
+            if (i + 1 <= argc)
+            {
+                i++;
+                float emp = 0;
+                if (Shell_Conversion_Str_to_Float(argv[i], &emp) < 0)
+                {
+                    SHELL_ERR(shell, "cannot vovertion this params");
+                    return -SHELL_NO_FETCH;
+                }
+                Terminal_Print(shell, "conversion value is %f\r\n", emp);
+            }
+            else
+            {
+                SHELL_ERR(shell, "not more argument");
+                return -SHELL_NO_FETCH;
+            }
+            break;
+        case 3:
+            if (i + 1 <= argc)
+            {
+                i++;
+                int emp = 0;
+                emp = Shell_Conversion_Str_to_Bool(argv[i], "true", "false");
+                if (emp < 0)
+                {
+                    SHELL_ERR(shell, "cannot vovertion this params");
+                    return -SHELL_NO_FETCH;
+                }
+                Terminal_Print(shell, "conversion value is %d, type %s\r\n", emp, emp == 0 ? "false" : "true");
+            }
+            else
+            {
+                SHELL_ERR(shell, "not more argument");
+                return -SHELL_NO_FETCH;
+            }
+            break;
+        default:
+            Terminal_Print (shell, "argc=%d ",argc);
+            Terminal_Print (shell, "argv = [");
+            unsigned int a;
+            for (a = 1; a < argc; a++)
+            {
+                Terminal_Print(shell, "%s, ",(char *)argv[a]);
+            }
+            Terminal_Print(shell, "%s]\r\n",(char *)argv[a]);
+            return 0;
+            break;
         }
-        Terminal_Print(shell, "%s]\r\n",(char *)argv[i]);
-    }
-    else if (param_num == 0)    /*is the fix param of "--help" or "-h"*/
-    {
-        /*can put any wont to display function of help on there*/
-        Shell_Display_Command_Help(shell, cmd);
     }
     return 0;
 }
-SHELL_COMMAND_DEFINE(test, "Show all params", cmd_test)
+SHELL_COMMAND_DEFINE(test, "Show all params", cmd_test,
+    SHELL_PARAM_DEFINE("--change_int", "-i", "change input to integer")
+    SHELL_PARAM_DEFINE("--change_flo", "-f", "change input to float")
+    SHELL_PARAM_DEFINE("--change_bool", "-b", "change input to bool, use true or false")
+)
 
 /*
  * @brief 该函数用于显示所有命令和命令对应的帮助
@@ -357,6 +422,83 @@ int Shell_Display_Command_Help (Shell_Handle_t *shell, const Shell_Command_Typed
         Terminal_Print(shell, "%-8d%-12s %-8s %s\r\n", i, cmd->params[i].full_name, cmd->params[i].nick_name, cmd->params[i].help);
     }
     return 0;
+}
+
+/*
+ * @brief 该函数用于将输入的参数转为整型
+ * @param param
+ * @param num
+ * @return 0 is success
+ * @return nagetive is error code
+*/
+int Shell_Conversion_Str_to_Int (char *param, long int *num)
+{
+
+    /*浪费太多空间了，需要用更加精简的实现，不应当继续使用strto函数了*/
+
+    char *str = param;
+    *num = strtol(param, &str, 10);
+    if (*str != '\0')
+    {
+        return -SHELL_NO_FETCH;
+    }
+    else if (str == param)
+    {
+        return -SHELL_ERROR;
+    }
+    else if (*num == 9223372036854775807 || *num == -9223372036854775807)
+    {
+        return -SHELL_OVER_RANGE;
+    }
+    return 0;
+}
+
+/*
+ * @brief 该函数用于将输入参数转换为浮点型
+ * @param param
+ * @param num
+ * @return 0 is success
+ * @return nagetive is error code
+*/
+int Shell_Conversion_Str_to_Float (char *param, float *num)
+{
+    /*浪费太多空间了，需要用更加精简的实现，不应当继续使用strto函数了*/
+    char *str = param;
+    *num = strtof(param, &str);
+    if (*str != '\0')
+    {
+        return -SHELL_NO_FETCH;
+    }
+    else if (str == param)
+    {
+        return -SHELL_ERROR;
+    }
+    return 0;
+}
+
+/*
+ * @brief 该函数用于将输入参数转为bool型
+ * @param param
+ * @param true_type 判断为true的字符串
+ * @param false_type 判断为false的字符串
+ * @return 0 false
+ * @return 1 true
+ * @return nagative is error code
+*/
+int Shell_Conversion_Str_to_Bool (char *param, const char *true_type, const char *false_type)
+{
+    if (strcmp((const char *)param, true_type) == 0)
+    {
+        return 1;
+    }
+    else if (strcmp((const char *)param, false_type) == 0)
+    {
+        return 0;
+    }
+    else
+    {
+        return -SHELL_NO_FETCH;
+    }
 }
 
 //自动补全(只完成了关联搜索，不会自动修改当前补全档)
