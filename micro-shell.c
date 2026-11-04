@@ -51,6 +51,8 @@
 #define SHELL_INF(x,...)            Terminal_Print((x),ANSI_COLOR_GRN "<inf> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
 #define SHELL_ERR(x,...)            Terminal_Print((x),ANSI_COLOR_RED "<err> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
 
+#define SHELL_CLEAN_BUFF(x)         memset((x)->cache_buff, ANSI_END_CODE, sizeof((x)->cache_buff));(x)->cache_size=0
+
 #if !defined(UNUSED)
 #define UNUSED(X) (void)X      /* To avoid gcc/g++ warnings */
 #endif // UNUSED   
@@ -226,19 +228,24 @@ int Shell_Archive_History (Shell_Handle_t *shell)
  * @brief 该函数按照深度获取历史记录
  * @param shell
  * @param data
- * @param deep 历史记录深度，0为第一条buff
+ * @param deep 历史记录深度，1为最新的历史记录，输入0无效
  * @return >= 0 is count of data size
  * @return -n is error code
  */
 int Shell_get_history_by_index(Shell_Handle_t *shell, void **data, unsigned int deep)
 {
+    if (deep == 0)
+    {
+        return -SHELL_NO_FETCH;
+    }
+
     Linked_List_Node_t *ptr = shell->history;
     if (NULL == ptr)
     {
         return -SHELL_BUSY;
     }
     
-    for (unsigned int i = 0; i < deep; i++)
+    for (unsigned int i = 0; i < deep - 1; i++)
     {
         if (NULL != ptr->next_node)
         {
@@ -427,15 +434,20 @@ static int Terminal_ESC_Mulit_Byte_Anlayze (Shell_Handle_t *shell,
                 tmp_entry++;
             }
             /*display history*/
-            if (Shell_get_history_by_index(shell, (void *)&data_buf, tmp_entry - 1) < 0)
+            if (Shell_get_history_by_index(shell, (void *)&data_buf, tmp_entry) < 0)
             {
+                shell->mulit_key_status = 0;
                 return -SHELL_NO_FETCH;
             }
             SHELL_BACK_TO_HEAD(shell);
             SHELL_HEAD(shell, shell->ret, data_buf);
             break;
         case 'B':          //dowm bottom
-            if (tmp_entry <= 1)
+            if (tmp_entry > 0)
+            {
+                tmp_entry--;
+            }
+            if (tmp_entry == 0)
             {
                 /*display buff*/
                 SHELL_BACK_TO_HEAD(shell);
@@ -444,15 +456,16 @@ static int Terminal_ESC_Mulit_Byte_Anlayze (Shell_Handle_t *shell,
             }
             else
             {
-                tmp_entry--;
+                /*display history*/
+                if (Shell_get_history_by_index(shell, (void *)&data_buf, tmp_entry) < 0)
+                {
+                    shell->mulit_key_status = 0;
+                    return -SHELL_NO_FETCH;
+                }
+                SHELL_BACK_TO_HEAD(shell);
+                SHELL_HEAD(shell, shell->ret, data_buf);
+                break;
             }
-            /*display history*/
-            if (Shell_get_history_by_index(shell, (void *)&data_buf, tmp_entry - 1) < 0)
-            {
-                return -SHELL_NO_FETCH;
-            }
-            SHELL_BACK_TO_HEAD(shell);
-            SHELL_HEAD(shell, shell->ret, data_buf);
             break;
         case 'C':          //right bottom
             // Terminal_Print(hfoc,"right\r\n");
@@ -495,8 +508,7 @@ int Shell_Iint (Shell_Handle_t *shell,
 
     /*init data cache*/
     strncpy(shell->host_name, SHELL_HOST_NAME, sizeof(SHELL_HOST_NAME));
-    memset(shell->cache_buff, ANSI_END_CODE, sizeof(shell->cache_buff));
-    shell->cache_size = 0;
+    SHELL_CLEAN_BUFF(shell);
 
     /*init history*/
     shell->history_entry = 0;
@@ -521,26 +533,10 @@ int Shell_Iint (Shell_Handle_t *shell,
     /*register command*/
     shell->command_num = 0;
     shell->Shell_command = NULL;
-    if (Shell_Register_Command(shell, &help))
-    {
-        SHELL_ERR(shell, "no memory to register function %d", shell->command_num);
-        return -SHELL_NO_MEM;
-    }
-    if (Shell_Register_Command(shell, &clean))
-    {
-        SHELL_ERR(shell, "no memory to register function %d", shell->command_num);
-        return -SHELL_NO_MEM;
-    }
-    if (Shell_Register_Command(shell, &clear))
-    {
-        SHELL_ERR(shell, "no memory to register function %d", shell->command_num);
-        return -SHELL_NO_MEM;
-    }
-    if (Shell_Register_Command(shell, &test))
-    {
-        SHELL_ERR(shell, "no memory to register function %d", shell->command_num);
-        return -SHELL_NO_MEM;
-    }
+    Shell_Register_Command(shell, &help);
+    Shell_Register_Command(shell, &clean);
+    Shell_Register_Command(shell, &clear);
+    Shell_Register_Command(shell, &test);
     return 0;
 }
 
@@ -550,18 +546,12 @@ int Shell_Iint (Shell_Handle_t *shell,
  * @param shell
  * @param command
  * @return 0 is success
- * @return - is error
  * @note 注意，传入的是命令的指针
  *       该函数必须在Shell_Init调用后才能调用，否则会出现命令表回环无法遍历的情况
 */
-int Shell_Register_Command(Shell_Handle_t *shell,const Shell_Command_Typedef *command)
+int Shell_Register_Command(Shell_Handle_t *shell, Linked_List_Node_t *command)
 {
-    Linked_List_Node_t *ptr = Linked_List_Node_Init((void *)command, command->param_num * sizeof(Shell_Param_Typedef));
-    if (NULL == ptr)
-    {
-        return -SHELL_NO_MEM;
-    }
-    shell->Shell_command = Linked_List_Add_Head(shell->Shell_command, ptr);
+    shell->Shell_command = Linked_List_Add_Head(shell->Shell_command, command);
     shell->command_num++;
     return 0;
 }
@@ -604,9 +594,33 @@ int Shell_Task (Shell_Handle_t *shell)
     }
 
     /*check mulite input like up down key*/
+    /*this fuction is special witch is return -SHELL_BUSY*/
+    /*that mean funtcion need next bytes to comferm */
+    /*and return 1 mead function now opreation once*/
     if (Terminal_ESC_Mulit_Byte_Anlayze(shell, data[0]))
     {
-        return 0;
+        return -SHELL_BUSY;
+    }
+
+    /*if turn history, copy it to cache*/
+    if (shell->history_entry)
+    {
+        /*get history buf and size*/
+        char *tmp_of_history = NULL;
+        unsigned int tmp_of_size = 0;
+        SHELL_CLEAN_BUFF(shell);
+        tmp_of_size = Shell_get_history_by_index(shell, (void *)&tmp_of_history, shell->history_entry);
+        if (tmp_of_size < 0)
+        {
+            SHELL_NEW_LINE(shell);
+            SHELL_ERR(shell, "tmp history can not get form heap, system error");
+            SHELL_NEW_LINE(shell);
+            SHELL_HEAD(shell, shell->ret, ANSI_NONE);
+            return -SHELL_NO_MEM;
+        }
+        memcpy(shell->cache_buff, tmp_of_history, tmp_of_size - 1);
+        shell->cache_size = tmp_of_size - 1;
+        shell->history_entry = 0;
     }
 
     switch (data[0])                //fine speshel key
@@ -680,7 +694,7 @@ int Shell_Task (Shell_Handle_t *shell)
     else
     {
         shell->ret = 0;
-        shell->cache_size = 0;
+        SHELL_CLEAN_BUFF(shell);
     }
     //anthe loop steart
     shell->history_entry = 0;

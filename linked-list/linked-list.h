@@ -9,7 +9,9 @@
  * 该库实现了单向，非循环链表的创建，头插，尾插，整体删除的功能
  * 请注意，为了节省空间，该链表库做了特殊修改，虽然可以移植，但是
  * 会出现浪费内存的现象
- * 双向链表可以直接当作单向链表使用，只要不去在意prev_node即可
+ * 
+ * 该组件提供了静态声明的链表节点的宏，在不需要动态删减而只是把链表当作
+ * 索引使用的情况下，强烈建议只使用静态链表节点
 */
 
 #if !defined(LINKED_LIST)
@@ -22,6 +24,19 @@ typedef struct Linked_List_Node_t
     void *data;                                 /*this node data*/
     int size;                                   /*this is node data size (option)*/
 }Linked_List_Node_t;
+
+/*
+ * @brief 该宏初始化一个静态单向链表节点
+ * @param no - 节点名称
+ * @param da - 节点需要装载的数据指针
+ * @param si - 节点数据的大小
+*/
+#define LINKED_LIST_NODE_DEFINE_STATIC(no, da, si)      \
+Linked_List_Node_t (no) = {                             \
+    .next_node = NULL,                                  \
+    .data = (da),                                        \
+    .size = (si),                                         \
+}
 
 /*
  * @brief 该函数初始化一个单向链表节点，链表空间在内存申请

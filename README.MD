@@ -6,7 +6,7 @@
   1. 上下层完全解耦，可以很方便地移植到其他地方，具体看[移植部分](#移植)
   2. 仅依赖`fifo`以及`linked-list`两个组件
   3. 支持动态增加用户命令，通过构建命令宏，用户的命令解算可以通过几个辅助函数进行状态机选择,具体看[开始使用](#使用)
-  4. 支持历史记录，条数以及cache深度都可以调整
+  4. 支持历史记录，使用统一的字节数限制历史记录，防止占用过多堆栈（历史记录使用malloc进行内存分配，之后需要修改）
   5. 支持单独编译，不需要修改c文件即可与其他组件一起使用
   6. 支持tab补全(功能仍需完善)
   7. 支持返回值显示
@@ -71,10 +71,25 @@ int main ()
   return -1;
 }
 ~~~~~
- - 接下来，就可以开始使用*Micor Shell*了
+ - 需要注意的是，在上述实例中，每输入十个字符才会进行一次回显，效果其实不是很好，这里只是展示该库的多字符处理能力，如果使用阻塞式获取字符，轮询处理的话，建议将主循环的函数简化成下方所示的状态
+~~~~~c
+while(1)
+{
+  /*use single char data buff*/
+  char get;
+  /*get data form human input like key bord or master app*/
+  gets(&get);
+  /*push data to ring buff*/
+  Shell_push_data(&shell, %get, sizeof(get));
+
+  /*call task function to precessing data*/
+  Shell_Task(&shell);
+}
+~~~~~
+ - 上述做法最大的好处就是输入就会立刻回显，但在应付方向键这种多字符的按键时，有时候会因为设备本身的原因丢失内容，从而回显出奇怪的符号，例如`[A`(上方向键)和`[B`下方向键。如果需要更好的处理方式的话，建议考虑使用空闲中断(如有)获取数据，轮询处理数据。`Shell_Push_data()`函数仅包含将数据压入FIFO的过程，并不会对数据进行处理，运行时间很短，可以直接在中断中调用，不需要额外的FIFO进行中转。
 
 ## 使用
-该库内置四个命令如下
+*Micor Shell*内置四个命令如下
 
 | 命令 | 用途 |
 |:-----:|:-----|
@@ -83,9 +98,9 @@ int main ()
 |`clean`|清除屏幕上所有显示的东西|
 |`clear`|与上一个命令一样|
 
-当然，相信各位一定不是为了使用这四个简单到不行的命令而移植这个库的，所以，使用的第一步，就是开始加载自己的函数，作为一个命令启动，*Micro Shell*的独特性就在于此，该库弃用了大部分shell支持的静态结构体数组命令表，转而使用链表作为命令索引，所以用户可以在初始化后，在库的外部动态注册命令并且使用，当然，为了实现这个特性，*Micor Shell*使用了了大量的指针，对内存的占用以及flash的占用会比较大，在当前版本，静态编译的库占用的空间大概在`RAM:512bytes Flash:15Kbytes`左右，随着命令的增加，占用会进一步增加，建议提前增大堆栈空间，以防止添加命令的时候爆栈。
+当然，相信各位一定不是为了使用这四个简单到不行的命令而移植这个库的，所以，使用的第一步，就是开始加载自己的函数，作为一个命令启动，*Micro Shell*的独特性就在于此，该库弃用了大部分shell支持的静态结构体数组命令表，转而使用链表作为命令索引，所以用户可以在初始化后，在库的外部动态注册命令并且使用，当然，为了实现这个特性，*Micor Shell*使用了了大量的指针，对内存的占用以及flash的占用会比较大，在当前版本，静态编译的库占用的空间大概在`RAM:0.8Kbytes Flash:15Kbytes`左右，随着命令的增加，占用会进一步增加，为了安全考虑，所有的命令结构都使用静态常量声明，而命令结构的链表索引使用静态声明，而不是通过malloc分配，在当前版本中，只有历史记录索引以及历史记录本身使用malloc分配的内存。随着命令数量的增长，消耗flash的速度应该会比消耗ram的速度要快不少。
 
-为了加载自己的函数，用户需要先声明定义一个用户函数，之后使用一个简单的*宏魔法*将用户函数以及对应的命令信息定义为一个静态的结构体，之后通过调用注册函数，将结构体指针纳入`Shell`实例的“搜索路径中”，从而实现动态加载命令的过程。由于原理讲起来比较复杂，首先我们先简单声明一个例子，之后再慢慢解析
+为了加载自己的函数，用户需要先声明定义一个用户函数，之后使用简单的*宏魔法*将用户函数以及对应的命令信息定义为一个静态的结构体，之后通过调用注册函数，将结构体指针纳入`Shell`实例的“搜索路径中”，从而实现在`micor-shell.c`源文件外加载命令的过程。由于原理讲起来比较复杂，首先我们先简单声明一个例子，之后再慢慢解析:
 ~~~~~c
 /*
  * @brief this function use for switch led on or off
@@ -175,19 +190,22 @@ typedef int Terminal_Function_t(int,void**);
  * @note  主干命令的help参数被默认放置在后缀 --help
  *          以及-h 的参数下，请注意不要让这两个参数被占用
 */
-#define SHELL_COMMAND_DEFINE(na,he,api,...) \
-const Shell_Param_Typedef PARAM_##na [] = {\
-    SHELL_PARAM_DEFINE("--help", "-h", he)\
-    ##__VA_ARGS__\
-};\
-const Shell_Command_Typedef na = {\
-    .name = #na,\
-    .params = PARAM_##na,\
-    .terminal_function = api,\
-    .param_num = sizeof(PARAM_##na)/sizeof(Shell_Param_Typedef),\
-};
+#define SHELL_COMMAND_DEFINE(na,he,api,...)                             \
+const Shell_Param_Typedef PARAM_##na [] = {                             \
+    SHELL_PARAM_DEFINE("--help", "-h", he)                              \
+    ##__VA_ARGS__                                                       \
+};                                                                      \
+const Shell_Command_Typedef COMMAND_##na = {                            \
+    .name = #na,                                                        \
+    .params = PARAM_##na,                                               \
+    .terminal_function = api,                                           \
+    .param_num = sizeof(PARAM_##na)/sizeof(Shell_Param_Typedef),        \
+};                                                                      \
+LINKED_LIST_NODE_DEFINE_STATIC(na,                                      \
+    (void *)&COMMAND_##na,                                              \
+    sizeof(COMMAND_##na));
 ~~~~~
-- 看着很长，但其实很好理解，第一个输入的参数是命令名，也是这个命令结构体的名称，在Shell中想要调用这个函数，就需要输入 `led` 而不是 `cmd_led`，第二个参数是帮助字符，当用户调用`help`命令的时候，这个字符就会格式化地输出到界面上，同时这个宏还定义了一个全名为`--help`,别名为`-h`的参数，当用户调用`led --help`或者`led -h`的时候，就会返回默认的参数值，这点我们之后讲，第三个参数就是用户之前声明定义的函数，作为命令的api被传入，由于这个宏是一个可变长度参数宏，我们还可以在默认的参数外继续添加任意数量的参数，这时候就需要使用到`SHELL_PARAM_DEFINE`宏，这个宏的原型如下
+- 看着很长，但其实很好理解，第一个输入的参数是命令名，也是这个链表节点的名称，在Shell中想要调用这个函数，就需要输入 `led` 而不是 `cmd_led`，第二个参数是帮助字符，当用户调用`help`命令的时候，这个字符就会格式化地输出到界面上，同时这个宏还定义了一个全名为`--help`,别名为`-h`的参数，当用户调用`led --help`或者`led -h`的时候，就会返回默认的参数值，这点我们之后讲，第三个参数就是用户之前声明定义的函数，作为命令的api被传入，由于这个宏是一个可变长度参数宏，我们还可以在默认的参数外继续添加任意数量的参数，这时候就需要使用到`SHELL_PARAM_DEFINE`宏，这个宏的原型如下
 ~~~~~c
 /*
  * @brief 该宏用于定义一个参数子项，
@@ -247,7 +265,7 @@ SHELL_PARAM_DEFINE("--help", "-h", "this is the help of led")
 > [!NOTE]
 > 值得注意的是，在声明命令及参数结构体的时候，已经将其声明为常量，所以在这里所使用的指针，也最好是常量指针
 
- - 获取到该命令结构体后，用户就可以使用一大串的字符串比对函数进行参数比对，然后用一大串`switch`函数进行功能实现，是不是觉得很麻烦？没错，所以*Micor Shell*为用户准备了另一个辅助函数`int Shell_Complite_Param_To_Num(Shell_Command_Typedef *cmd, char *param);` 其函数原型如下
+ - 获取到该命令结构体后，用户就可以使用一大串的字符串比对函数进行参数比对，然后用一大串`switch`函数进行功能实现，是不是觉得很麻烦？没错，所以*Micor Shell*为用户准备了另一个辅助函数`Shell_Complite_Param_To_Num` 其函数原型如下
 ~~~~~c
 /*
  * @brief 该函数用于获取参数的顺序值，用于匹配次级参数
@@ -264,6 +282,9 @@ int Shell_Complite_Param_To_Num(Shell_Command_Typedef *cmd, char *param);
  - 那么多个参数怎么办呢？我们比较推荐的方法是使用`for`循环，依次调用`Shell_Complite_Param_To_Num`函数进行参数解析，如果参数后面跟有数值的话，则可以使用（这部分还没开发完）函数进行浮点数，整数，字符串布尔值的转换。随后将参数继续往后推进，直到遍历`size`个参数。
 
   4. 最后，在`Shell_Init`函数之后的随便哪个地方调用`Shell_Register_Command`函数，将命令注册到Shell实例里，即可正常使用。
+~~~~~c
+  Shell_Register_Command(shell, &led);
+~~~~~
 
 > [!CAUTION]
 > `Shell_Register_Command`函数必须在`Shell_Init`函数之后调用，否则有可能出现链表回环的情况。

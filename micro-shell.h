@@ -14,7 +14,6 @@ extern"C"{
 
 #include "./fifo/fifo.h"
 #include "./linked-list/linked-list.h"
-// #include "./cache/cache.h"
 
 /********************************SETTINGS************************************** */
 
@@ -165,17 +164,21 @@ typedef struct
  * @note  主干命令的help参数被默认放置在后缀 --help
  *          以及-h 的参数下，请注意不要让这两个参数被占用
 */
-#define SHELL_COMMAND_DEFINE(na,he,api,...) \
-const Shell_Param_Typedef PARAM_##na [] = {\
-    SHELL_PARAM_DEFINE("--help", "-h", he)\
-    ##__VA_ARGS__\
-};\
-const Shell_Command_Typedef na = {\
-    .name = #na,\
-    .params = PARAM_##na,\
-    .terminal_function = api,\
-    .param_num = sizeof(PARAM_##na)/sizeof(Shell_Param_Typedef),\
-};
+#define SHELL_COMMAND_DEFINE(na,he,api,...)                             \
+const Shell_Param_Typedef PARAM_##na [] = {                             \
+    SHELL_PARAM_DEFINE("--help", "-h", he)                              \
+    ##__VA_ARGS__                                                       \
+};                                                                      \
+const Shell_Command_Typedef COMMAND_##na = {                            \
+    .name = #na,                                                        \
+    .params = PARAM_##na,                                               \
+    .terminal_function = api,                                           \
+    .param_num = sizeof(PARAM_##na)/sizeof(Shell_Param_Typedef),        \
+};                                                                      \
+LINKED_LIST_NODE_DEFINE_STATIC(na,                                      \
+    (void *)&COMMAND_##na,                                              \
+    sizeof(COMMAND_##na));
+
 /*this is the simple example to how builed a commad struct*/
 // SHELL_COMMAND_DEFINE(cmd, "hello is cmd command help", NULL,    
 //     SHELL_PARAM_DEFINE("--shutdown", "-s", "is for shut down system")
@@ -241,7 +244,7 @@ int Shell_Iint (Shell_Handle_t *shell, void (*send_data)(char *message,unsigned 
  * @note 注意，传入的是命令的指针
  *       该函数必须在Shell_Init调用后才能调用，否则会出现命令表回环无法遍历的情况
 */
-int Shell_Register_Command(Shell_Handle_t *shell,const Shell_Command_Typedef *command);
+int Shell_Register_Command(Shell_Handle_t *shell, Linked_List_Node_t *command);
 
 /*
  * @brief 该函数将数据推入内部环形缓冲区，处理函数会在非中断条件下处理这些数据
