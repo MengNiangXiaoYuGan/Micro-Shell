@@ -1,5 +1,5 @@
 /*
- * @brief 
+ * @brief
  *
  * Custom MNXYG 
  * 
@@ -12,23 +12,12 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define ANSI_FONT_BOLD              "\x1B[1m"       /*加粗*/
-#define ANSI_FONT_ITALIC            "\x1B[3m"       /*斜体*/
-#define ANSI_FONT_UNDERLINE         "\x1B[4m"       /*下划线*/
-#define ANSI_FONT_HIGHLIGHT         "\x1B[7m"       /*反显*/
-#define ANSI_FONT_STRIKETHROUGH     "\x1B[9m"       /*删除线*/
+#define ANSI_NONE                   ""
+#define ANSI_END_CODE               '\0'
 
-#define ANSI_COLOR_RED   "\x1B[31m"
-#define ANSI_COLOR_GRN   "\x1B[32m"
-#define ANSI_COLOR_YEL   "\x1B[33m"
-#define ANSI_COLOR_BLU   "\x1B[34m"
-#define ANSI_COLOR_MAG   "\x1B[35m"
-#define ANSI_COLOR_CYN   "\x1B[36m"
-#define ANSI_COLOR_WHT   "\x1B[37m"
-#define ANSI_COLOR_RESET "\x1B[0m"
-
-#define ANSI_NONE        ""
-#define ANSI_END_CODE    '\0'
+#define ANSI_RIGHT                  "\033[C"
+#define ANSI_LEFT                   "\033[D"
+#define ANSI_BACK_INS(x, ptr)       Terminal_Print((x), "%s \033[%dD",(ptr), strlen(ptr) + 1)
 
 #define SHELL_HEAD(x,ret,string)        Terminal_Print((x),"%s%d "ANSI_COLOR_RESET ANSI_FONT_BOLD ANSI_COLOR_MAG"%s" ANSI_COLOR_RESET "->%s",   \
                                     (ret) == 0 ? ANSI_COLOR_GRN : ANSI_COLOR_RED,                                                               \
@@ -38,24 +27,15 @@
 
 #define SHELL_BACK_TO_HEAD(x)       Terminal_Print((x), "\r\033[K")
 #define SHELL_BACK_SPACE(x)         Terminal_Print((x), "\b \b")
+#define SHELL_INSTE_STR(x, string)  Terminal_Print((x),"\033[@%s", string)
 
 #define SHELL_HELLO_INTERFACE(x)    \
         Terminal_Print((x), "*******************************************************\r\n"\
                             "****************____MICRO_____SHELL____****************\r\n"\
                             "*******************************************************\r\n")
 
-#define SHELL_NEW_LINE(x)           Terminal_Print((x),"\r\n")
-#define SHELL_CLEAN_SCREEN(x)       Terminal_Print((x),"\033[H\033[2J")
-
-
-#define SHELL_INF(x,...)            Terminal_Print((x),ANSI_COLOR_GRN "<inf> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
-#define SHELL_ERR(x,...)            Terminal_Print((x),ANSI_COLOR_RED "<err> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
-
 #define SHELL_CLEAN_BUFF(x)         memset((x)->cache_buff, 0, sizeof((x)->cache_buff));(x)->cache_size=0
-
-#if !defined(UNUSED)
-#define UNUSED(X) (void)X      /* To avoid gcc/g++ warnings */
-#endif // UNUSED   
+#define SHELL_CLEAN_CURSOR(x)       (x)->cursor_position=0
 
 /*****************************************DEFAULT SHELL FUNCTION**************************************** */
 
@@ -457,7 +437,7 @@ int Shell_Display_Command_Help (Shell_Handle_t *shell, const Shell_Command_Typed
 {
     Terminal_Print(shell, "%-12s %s\r\n", cmd->name, cmd->params[0].help);
     Terminal_Print(shell, "params : \r\n");
-    Terminal_Print(shell, "%-8d%-12s %-12s %s\r\n", 0, cmd->params[0].full_name, cmd->params[0].nick_name, "use for display help informations");
+    Terminal_Print(shell, "%-8d%-12s %-8s %s\r\n", 0, cmd->params[0].full_name, cmd->params[0].nick_name, "use for display help informations");
     for (unsigned char i = 1; i < cmd->param_num; i++)
     {
         Terminal_Print(shell, "%-8d%-12s %-8s %s\r\n", i, cmd->params[i].full_name, cmd->params[i].nick_name, cmd->params[i].help);
@@ -700,59 +680,74 @@ static int Terminal_ESC_Mulit_Byte_Anlayze (Shell_Handle_t *shell,
     }
     else if (shell->mulit_key_status == 2)
     {
-        unsigned int tmp_entry = shell->history_entry;
+        int error_code = 0;
         switch (data)
         {
         case 'A':          //up bottom
-            if (tmp_entry <= 65536)
+            if (shell->history_entry <= 65536)
             {
-                tmp_entry++;
+                shell->history_entry++;
             }
             /*display history*/
-            if (Shell_get_history_by_index(shell, (void *)&data_buf, tmp_entry) < 0)
+            error_code = Shell_get_history_by_index(shell, (void *)&data_buf, shell->history_entry);
+            if (error_code < 0)
             {
                 shell->mulit_key_status = 0;
                 return -SHELL_NO_FETCH;
             }
+            shell->cache_size = error_code - 1;
+            shell->cursor_position = shell->cache_size;
             SHELL_BACK_TO_HEAD(shell);
             SHELL_HEAD(shell, shell->ret, data_buf);
             break;
         case 'B':          //dowm bottom
-            if (tmp_entry > 0)
+            if (shell->history_entry > 0)
             {
-                tmp_entry--;
+                shell->history_entry--;
             }
-            if (tmp_entry == 0)
+            if (shell->history_entry == 0)
             {
                 /*display buff*/
                 SHELL_BACK_TO_HEAD(shell);
                 SHELL_HEAD(shell, shell->ret, shell->cache_buff);
+                shell->cache_size = strlen(shell->cache_buff);
+                shell->cursor_position = shell->cache_size;
                 break;
             }
             else
             {
                 /*display history*/
-                if (Shell_get_history_by_index(shell, (void *)&data_buf, tmp_entry) < 0)
+                error_code = Shell_get_history_by_index(shell, (void *)&data_buf, shell->history_entry);
+                if (error_code < 0)
                 {
                     shell->mulit_key_status = 0;
                     return -SHELL_NO_FETCH;
                 }
+                shell->cache_size = error_code- 1;
+                shell->cursor_position = shell->cache_size;
                 SHELL_BACK_TO_HEAD(shell);
                 SHELL_HEAD(shell, shell->ret, data_buf);
                 break;
             }
             break;
-        case 'C':          //right bottom
-            // Terminal_Print(hfoc,"right\r\n");
+        case 'C':          //right
+            if (shell->cursor_position < shell->cache_size)
+            {
+                shell->cursor_position++;
+                Terminal_Print(shell, ANSI_RIGHT);
+            }
             break;
-        case 'D':          //left bottom
-            // Terminal_Print(hfoc,"left\r\n");
+        case 'D':          //left
+            if (shell->cursor_position > 0)
+            {
+                shell->cursor_position--;
+                Terminal_Print(shell, ANSI_LEFT);
+            }
             break;
         default:
             shell->mulit_key_status = 0;
             break;
         }
-        shell->history_entry = tmp_entry;
         shell->mulit_key_status = 0;
         return 1;
     }
@@ -784,6 +779,7 @@ int Shell_Iint (Shell_Handle_t *shell,
     /*init data cache*/
     strncpy(shell->host_name, SHELL_HOST_NAME, sizeof(SHELL_HOST_NAME));
     SHELL_CLEAN_BUFF(shell);
+    SHELL_CLEAN_CURSOR(shell);
 
     /*init history*/
     shell->history_entry = 0;
@@ -894,7 +890,11 @@ int Shell_Task (Shell_Handle_t *shell)
             return -SHELL_NO_MEM;
         }
         memcpy(shell->cache_buff, tmp_of_history, tmp_of_size - 1);
+        /*cursor position is now settings*/
         shell->cache_size = tmp_of_size - 1;
+
+
+        // shell->cursor_position = shell->cache_size;
         shell->history_entry = 0;
     }
 
@@ -903,11 +903,25 @@ int Shell_Task (Shell_Handle_t *shell)
     case 0x08:
     case 0x7f:                      //back space or delate
         /*delete form cache*/
-        if (shell->cache_size > 0)
+        if (shell->cursor_position > 0 && shell->cursor_position == shell->cache_size)
         {
             shell->cache_size--;
+            shell->cursor_position--;
             shell->cache_buff[shell->cache_size] = ANSI_END_CODE;
             SHELL_BACK_SPACE(shell);
+        }
+        else if (shell->cursor_position > 0)
+        {
+            shell->cursor_position--;
+            /*put force data back*/
+            SHELL_BACK_SPACE(shell);
+            for (unsigned int i = shell->cursor_position; i < shell->cache_size; i++)
+            {
+                shell->cache_buff[i] = shell->cache_buff[i+1];
+            }
+            shell->cache_size--;
+            char *ptr = &shell->cache_buff[shell->cursor_position];
+            ANSI_BACK_INS(shell, ptr);
         }
         return -SHELL_BUSY;
         break;
@@ -916,6 +930,7 @@ int Shell_Task (Shell_Handle_t *shell)
                 shell->cache_buff,
                 shell->cache_size);
         SHELL_HEAD(shell, shell->ret, shell->cache_buff);
+        shell->cursor_position = shell->cache_size;
         return -SHELL_BUSY;
         break;
     case 0x10:
@@ -932,9 +947,18 @@ int Shell_Task (Shell_Handle_t *shell)
         /*save to cache buff*/
         if (shell->cache_size < sizeof(shell->cache_buff) - 1)
         {
-            shell->cache_buff[shell->cache_size] = data[0];
+            if (shell->cache_size != shell->cursor_position)
+            {
+                /*push data to tail*/
+                for (unsigned int i = shell->cache_size; i > shell->cursor_position; i--)
+                {
+                    shell->cache_buff[i] = shell->cache_buff[i - 1];
+                }
+            }
+            shell->cache_buff[shell->cursor_position] = data[0];
             shell->cache_size++;
-            Terminal_Print(shell, "%s", data);
+            shell->cursor_position++;
+            SHELL_INSTE_STR(shell, &data[0]);
             return 0;
         }
         else return -SHELL_OUT_OF_CACH;
@@ -969,7 +993,6 @@ int Shell_Task (Shell_Handle_t *shell)
         {
             shell->ret = cmd->terminal_function(params_number,params);
         }
-
     }
     else
     {
@@ -977,6 +1000,7 @@ int Shell_Task (Shell_Handle_t *shell)
     }
     /*clean buff*/
     SHELL_CLEAN_BUFF(shell);
+    SHELL_CLEAN_CURSOR(shell);
     //anthe loop steart
     shell->history_entry = 0;
     SHELL_HEAD(shell, shell->ret, ANSI_NONE);
