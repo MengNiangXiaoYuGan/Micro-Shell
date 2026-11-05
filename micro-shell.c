@@ -51,7 +51,7 @@
 #define SHELL_INF(x,...)            Terminal_Print((x),ANSI_COLOR_GRN "<inf> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
 #define SHELL_ERR(x,...)            Terminal_Print((x),ANSI_COLOR_RED "<err> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
 
-#define SHELL_CLEAN_BUFF(x)         memset((x)->cache_buff, ANSI_END_CODE, sizeof((x)->cache_buff));(x)->cache_size=0
+#define SHELL_CLEAN_BUFF(x)         memset((x)->cache_buff, 0, sizeof((x)->cache_buff));(x)->cache_size=0
 
 #if !defined(UNUSED)
 #define UNUSED(X) (void)X      /* To avoid gcc/g++ warnings */
@@ -266,7 +266,7 @@ int Shell_Archive_History (Shell_Handle_t *shell)
             }
         }
         free(node->next_node->data);
-        shell->cache_size -= node->next_node->size;
+        shell->history_size -= node->next_node->size;
         free(node->next_node);
         node->next_node = NULL;
     }
@@ -279,10 +279,7 @@ int Shell_Archive_History (Shell_Handle_t *shell)
     memcpy(buff_ptr, shell->cache_buff, shell->cache_size);
     Linked_List_Node_t *his = Linked_List_Node_Init(buff_ptr, shell->cache_size);
     shell->history = Linked_List_Add_Head(shell->history, his);
-
-    /*reset buff*/
-    memset(shell->cache_buff, ANSI_END_CODE, sizeof(shell->cache_buff));
-    shell->cache_size = 0;
+    shell->history_size += shell->cache_size;
     return 0;
 }
 
@@ -841,7 +838,7 @@ int Shell_Task (Shell_Handle_t *shell)
         break;
     default:                        //notthing juet nomal data
         /*save to cache buff*/
-        if (shell->cache_size < sizeof(shell->cache_buff))
+        if (shell->cache_size < sizeof(shell->cache_buff) - 1)
         {
             shell->cache_buff[shell->cache_size] = data[0];
             shell->cache_size++;
@@ -856,12 +853,21 @@ int Shell_Task (Shell_Handle_t *shell)
     /*get buff*/
     if(shell->cache_size > 1)
     {
+        //archive cache to histiory
+        if (Shell_Archive_History(shell) < 0)
+        {
+            SHELL_ERR(shell, "cache history is loop or memory out");
+        }
+
+        /*this function will change cache, so must archive cache befor this function*/
         //dilime params
         void *params[SHELL_MAX_PARAM_NUMBER + 1];
         params[0] = (void *)shell;
         short params_number = Terminal_Get_Param(shell->cache_buff, " ", &params[1], SHELL_MAX_PARAM_NUMBER);
+
         //search functuin
         const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell,(char *)params[1]);
+
         if (NULL == cmd)
         {
             Terminal_Print(shell, "%s : can`t not fine command\r\n",params[1]);
@@ -871,17 +877,14 @@ int Shell_Task (Shell_Handle_t *shell)
         {
             shell->ret = cmd->terminal_function(params_number,params);
         }
-        //archive cache to histiory
-        if (Shell_Archive_History(shell) < 0)
-        {
-            SHELL_ERR(shell, "cache history is loop or memory out");
-        }
+
     }
     else
     {
         shell->ret = 0;
-        SHELL_CLEAN_BUFF(shell);
     }
+    /*clean buff*/
+    SHELL_CLEAN_BUFF(shell);
     //anthe loop steart
     shell->history_entry = 0;
     SHELL_HEAD(shell, shell->ret, ANSI_NONE);
