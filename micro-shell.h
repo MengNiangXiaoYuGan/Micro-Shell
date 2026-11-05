@@ -33,10 +33,6 @@ extern"C"{
 #define SHELL_HOST_NAME "root"
 
 
-
-
-
-
 /**********************************DEFINE*************************************** */
 
 #define    SHELL_ERROR      1
@@ -45,6 +41,25 @@ extern"C"{
 #define    SHELL_NO_FETCH   5
 #define    SHELL_NO_MEM     6
 #define SHELL_OUT_OF_CACH   7
+
+#define ANSI_FONT_BOLD              "\x1B[1m"       /*加粗*/
+#define ANSI_FONT_ITALIC            "\x1B[3m"       /*斜体*/
+#define ANSI_FONT_UNDERLINE         "\x1B[4m"       /*下划线*/
+#define ANSI_FONT_HIGHLIGHT         "\x1B[7m"       /*反显*/
+#define ANSI_FONT_STRIKETHROUGH     "\x1B[9m"       /*删除线*/
+
+#define ANSI_COLOR_RED   "\x1B[31m"
+#define ANSI_COLOR_GRN   "\x1B[32m"
+#define ANSI_COLOR_YEL   "\x1B[33m"
+#define ANSI_COLOR_BLU   "\x1B[34m"
+#define ANSI_COLOR_MAG   "\x1B[35m"
+#define ANSI_COLOR_CYN   "\x1B[36m"
+#define ANSI_COLOR_WHT   "\x1B[37m"
+#define ANSI_COLOR_RESET "\x1B[0m"
+
+#if !defined(UNUSED)
+#define UNUSED(X) (void)X      /* To avoid gcc/g++ warnings */
+#endif // UNUSED   
 
 typedef void Shell_Send_Data_t(char*, unsigned short);
 
@@ -67,6 +82,9 @@ typedef struct
 
     /*input table size*/
     unsigned int cache_size;
+
+    /*input table position*/
+    unsigned int cursor_position;
 
     /*retun value save*/
     int ret;
@@ -185,6 +203,23 @@ LINKED_LIST_NODE_DEFINE_STATIC((na),                                    \
 //     SHELL_PARAM_DEFINE("--reboot", "-r", "is for reboot system")
 //     /*you can use infenity number of SHELL_PARAM_DEFINE to define params*/
 // )
+
+/*
+ * @brief 该宏会使终端输出另起新行
+*/
+#define SHELL_NEW_LINE(x)           Terminal_Print((x),"\r\n")
+
+/*
+ * @brief 该宏会让终端上的输出完全清除
+*/
+#define SHELL_CLEAN_SCREEN(x)       Terminal_Print((x),"\033[H\033[2J")
+
+/*
+ * @brief 这三个宏是帮助宏，使用方式和Terminal_Printer一致，但是会有对应的颜色显示，并且有错误指示前标
+*/
+#define SHELL_INF(x,...)            Terminal_Print((x),ANSI_COLOR_GRN "<inf> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
+#define SHELL_WRN(x,...)            Terminal_Print((x),ANSI_COLOR_YEL "<wrn> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
+#define SHELL_ERR(x,...)            Terminal_Print((x),ANSI_COLOR_RED "<err> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
 
 /*function*/
 

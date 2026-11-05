@@ -109,7 +109,7 @@ while(1)
  * @retrn -1 is error IO
  * @retun 2 is led aleady on or off
  */
-int cmd_led (int argc, void *arg[])
+int cmd_led (int argc, void *argv[])
 {
   static unsigned char led_status;
   /*get shell handle*/
@@ -128,19 +128,27 @@ int cmd_led (int argc, void *arg[])
       Shell_Display_Command_Help(shell, cmd);
       break;
     case 1:
-      if (led_status != 0) return 2;
+      if (led_status != 0)
+      {
+        SHELL_WRN(shell, "led all ready on");
+        return 2;
+      }
       if (*set_led_on()*) return -1;
       led_status = 1;
       break;
     case 2:
-      if (led_status == 0) return 2;
+      if (led_status == 0)
+      {
+        SHELL_WRN(shell, "led all ready off");
+        return 2;
+      }
       if (*set_led_off()*) return -1;
       led_status = 0;
       break;
     default:
       /*reurn is negtive value*/
       /*there are no any param to get*/
-      Terminal_Print(shell,"led is %d\r\n", led_status == 0 ? "off", "on");
+      Terminal_Print(shell,"led is %s\r\n", led_status == 0 ? "off" : "on");
       break;
   }
   return 0;
@@ -150,8 +158,8 @@ int cmd_led (int argc, void *arg[])
 SHELL_COMMAND_DEFINE(led, 
     "is user function use for turn led on or off", 
     cmd_led,
-    SHELL_PARAM_DEFINE("--on", "-o", "turn on led")
-    SHELL_PARAM_DEFINE("--off", "-f", "turn off led")
+    SHELL_PARAM_DEFINE("on", "-o", "turn on led")
+    SHELL_PARAM_DEFINE("off", "-f", "turn off led")
 )
 ~~~~~
   接下来，开始解析上述行为到底做了什么
@@ -216,7 +224,7 @@ LINKED_LIST_NODE_DEFINE_STATIC((na),                                    \
 ~~~~~c
 SHELL_PARAM_DEFINE("--help", "-h", "this is the help of led")
 ~~~~~
- - 由于`help`参数已经被命令定义占用了，所以实际上我们并不需要声明任何有关`--help`或者`-h`的参数，在这个例子中，可以看到，除了默认的`--help`参数外，例子还声明了两个参数，一个是`--on`,一个是`--off`，请注意它们声明的顺序，声明的顺序对应了使用辅助函数时返回的顺序值，所以顺序很重要，在声明完命令后，一定一定不要修改参数的顺序，如果需要添加额外的参数，尽量在最后一个参数的后方添加，这样对代码的扰动是最小的，并且在使用辅助函数进行参数解析的时候，随意排布的参数并不会对实际使用造成影响（可能会有一点，帮助界面的参数排布可能不是很拟人）
+ - 由于`help`参数已经被命令定义占用了，所以实际上我们并不需要声明任何有关`--help`或者`-h`的参数，在这个例子中，可以看到，除了默认的`--help`参数外，例子还声明了两个参数，一个是`on`,一个是`off`，请注意它们声明的顺序，声明的顺序对应了使用辅助函数时返回的顺序值，所以顺序很重要，在声明完命令后，一定一定不要修改参数的顺序，如果需要添加额外的参数，尽量在最后一个参数的后方添加，这样对代码的扰动是最小的，并且在使用辅助函数进行参数解析的时候，随意排布的参数并不会对实际使用造成影响（可能会有一点，帮助界面的参数排布可能不是很拟人）
 
 - 接下来，我们终于可以回到命令的api函数，进行函数实现。
 
@@ -288,5 +296,12 @@ int Shell_Complite_Param_To_Num(Shell_Command_Typedef *cmd, char *param);
 
 ## 深入了解
  - 这个组件原本是MNXYG-FOC库的一个小组件，但是在优化的过程中，渐渐形成了一个独立的解耦库，并且在体验了[`Zephyr RTOS`](https://docs.zephyrproject.org/latest/index.html)的shell子系统后，我认为这个组件已经优化到足够独立出来，作为一个独立的组件或者库被使用。
+ - 关于自动补全的机制
+   1. 由于没有时间控制函数，所有的自动补全命令由`tab`键单击完成
+   2. 在没有输入的情况下，单击`tab`键，将会显示所有命令，但不会显示任何帮助
+   3. 在有部分输入的情况下，单击`tab`键，将会根据当前输入，在下方列出候选项，如果没有候选项，则只会列出一个空行
+   4. 在输入了一个完整命令的情况下，单击`tab`键，将会显示当前命令的标准帮助文档，也就是调用显示帮助的用户辅助函数
+   5. 在输入一个完整命令并且输入了部分参数的情况下，单击`tab`键，将会显示候选的参数选项以及参数对应的帮助文本，这个机制无论有几个参数都会生效，生效的范围为最后一个参数
   
 ## 更新记录
+2026年11月5日 1.0.0发布
