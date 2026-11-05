@@ -23,6 +23,9 @@ extern"C"{
 /*Max Cache buff size*/
 #define SHELL_CACHE_DEEP            64  /*bytes*/
 
+/*Max cache or output buff*/
+#define SHELL_POP_CACHE_DEEP        4096 /*bytes*/
+
 /*Max param num*/
 #define SHELL_MAX_PARAM_NUMBER      6
 
@@ -41,6 +44,7 @@ extern"C"{
 #define    SHELL_NO_FETCH   5
 #define    SHELL_NO_MEM     6
 #define SHELL_OUT_OF_CACH   7
+#define SHELL_COMMAND_EXITS 8
 
 #define ANSI_FONT_BOLD              "\x1B[1m"       /*加粗*/
 #define ANSI_FONT_ITALIC            "\x1B[3m"       /*斜体*/
@@ -321,7 +325,7 @@ int Shell_Iint (Shell_Handle_t *shell, void (*send_data)(char *message,unsigned 
  * @param shell
  * @param command
  * @return 0 is success
- * @return - is error
+ * @return negetive is error
  * @note 注意，传入的是命令的指针
  *       该函数必须在Shell_Init调用后才能调用，否则会出现命令表回环无法遍历的情况
 */
