@@ -51,7 +51,7 @@
 #define SHELL_INF(x,...)            Terminal_Print((x),ANSI_COLOR_GRN "<inf> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
 #define SHELL_ERR(x,...)            Terminal_Print((x),ANSI_COLOR_RED "<err> : %s\r\n" ANSI_COLOR_RESET, ##__VA_ARGS__)
 
-#define SHELL_CLEAN_BUFF(x)         memset((x)->cache_buff, ANSI_END_CODE, sizeof((x)->cache_buff));(x)->cache_size=0
+#define SHELL_CLEAN_BUFF(x)         memset((x)->cache_buff, 0, sizeof((x)->cache_buff));(x)->cache_size=0
 
 #if !defined(UNUSED)
 #define UNUSED(X) (void)X      /* To avoid gcc/g++ warnings */
@@ -69,27 +69,92 @@ int cmd_test (int argc,void *argv[])
     /*get this command steurct*/
     const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell, argv[1]);
     /*get param list and num*/
-    int param_num = Shell_Complite_Param_To_Num(cmd, argv[2]);
 
-    if (param_num < 0)  /*get not fetch any param*/
+    for (int i = 2; i <= argc; i++)
     {
-        unsigned int i;
-        Terminal_Print (shell, "argc=%d ",argc);
-        Terminal_Print (shell, "argv = [");
-        for (i = 1; i < argc; i++)
+        int param_num = Shell_Complite_Param_To_Num(cmd, argv[2]);
+        switch (param_num)
         {
-            Terminal_Print(shell, "%s, ",(char *)argv[i]);
+        case 0:
+            /*display help information*/
+            Shell_Display_Command_Help(shell, cmd);
+            return 0;
+            break;
+        case 1:
+            if (i + 1 <= argc)
+            {
+                i++;
+                int emp = 0;
+                if (Shell_Conversion_Str_to_Int(argv[i], &emp) < 0)
+                {
+                    SHELL_ERR(shell, "cannot vovertion this params");
+                    return -SHELL_NO_FETCH;
+                }
+                Terminal_Print(shell, "conversion value is %ld\r\n", emp);
+            }
+            else
+            {
+                SHELL_ERR(shell, "not more argument");
+                return -SHELL_NO_FETCH;
+            }
+            break;
+        case 2:
+            if (i + 1 <= argc)
+            {
+                i++;
+                float emp = 0;
+                if (Shell_Conversion_Str_to_Float(argv[i], &emp) < 0)
+                {
+                    SHELL_ERR(shell, "cannot vovertion this params");
+                    return -SHELL_NO_FETCH;
+                }
+                Terminal_Print(shell, "conversion value is %f\r\n", emp);
+            }
+            else
+            {
+                SHELL_ERR(shell, "not more argument");
+                return -SHELL_NO_FETCH;
+            }
+            break;
+        case 3:
+            if (i + 1 <= argc)
+            {
+                i++;
+                int emp = 0;
+                emp = Shell_Conversion_Str_to_Bool(argv[i], "true", "false");
+                if (emp < 0)
+                {
+                    SHELL_ERR(shell, "cannot vovertion this params");
+                    return -SHELL_NO_FETCH;
+                }
+                Terminal_Print(shell, "conversion value is %d, type %s\r\n", emp, emp == 0 ? "false" : "true");
+            }
+            else
+            {
+                SHELL_ERR(shell, "not more argument");
+                return -SHELL_NO_FETCH;
+            }
+            break;
+        default:
+            Terminal_Print (shell, "argc=%d ",argc);
+            Terminal_Print (shell, "argv = [");
+            unsigned int a;
+            for (a = 1; a < argc; a++)
+            {
+                Terminal_Print(shell, "%s, ",(char *)argv[a]);
+            }
+            Terminal_Print(shell, "%s]\r\n",(char *)argv[a]);
+            return 0;
+            break;
         }
-        Terminal_Print(shell, "%s]\r\n",(char *)argv[i]);
-    }
-    else if (param_num == 0)    /*is the fix param of "--help" or "-h"*/
-    {
-        /*can put any wont to display function of help on there*/
-        Shell_Display_Command_Help(shell, cmd);
     }
     return 0;
 }
-SHELL_COMMAND_DEFINE(test, "Show all params", cmd_test)
+SHELL_COMMAND_DEFINE(test, "Show all params", cmd_test,
+    SHELL_PARAM_DEFINE("--change_int", "-i", "change input to integer")
+    SHELL_PARAM_DEFINE("--change_flo", "-f", "change input to float")
+    SHELL_PARAM_DEFINE("--change_bool", "-b", "change input to bool, use true or false")
+)
 
 /*
  * @brief 该函数用于显示所有命令和命令对应的帮助
@@ -151,7 +216,7 @@ void Terminal_Print(Shell_Handle_t *shell,
  * @param max_num   最多参数数量
  * @return 分割后的参数数量
 */
-static short Terminal_Get_Param(char *message,
+short static Shell_Get_Param(char *message,
         char *delim,
         void *get[],
         short max_number)
@@ -179,17 +244,33 @@ inline unsigned char Shell_get_Command_List_Size(Shell_Handle_t *shell)
 }
 
 /*
- * @brief 该函数用于归档历史记录
+ * @brief 该函数用于清除最旧的历史记录（尾删）
+ *         不直接使用linked-list库的尾删函数
+ *         的主要原因是历史记录的data同样使用
+ *         malloc获取，需要free，而linked-list
+ *         的尾删函数没有这个功能
  * @param shell
  * @return 0 is success
- * @return nagetive history linked list have loop
+ * @return -SHELL_NOMEM 历史记录已经删光了
+ * @return -SHELL_ERROR 历史记录回环了（在实际程序中这不应该出现）
 */
-int Shell_Archive_History (Shell_Handle_t *shell)
+int static Shell_Delete_Oldest_History(Shell_Handle_t *shell)
 {
-    /*check cache limit*/
-    while (shell->cache_size > shell->history_size_limit - shell->history_size)
+    if (shell->history == NULL)
     {
-        /*kill most older history*/
+        /*if no more history list*/
+        return -SHELL_NO_MEM;
+    }
+    else if (shell->history->next_node == NULL)
+    {
+        /*last one history*/
+        free(shell->history->data);
+        free(shell->history);
+        shell->history = NULL;
+    }
+    else
+    {
+        /*kill older history*/
         Linked_List_Node_t *node = shell->history;
         Linked_List_Node_t *start = node;
         while (NULL != node->next_node->next_node)
@@ -201,23 +282,48 @@ int Shell_Archive_History (Shell_Handle_t *shell)
             }
         }
         free(node->next_node->data);
-        shell->cache_size -= node->next_node->size;
+        shell->history_size -= node->next_node->size;
         free(node->next_node);
         node->next_node = NULL;
     }
+    return 0;
+}
+
+/*
+ * @brief 该函数用于归档历史记录
+ * @param shell
+ * @return 0 is success
+ * @return nagetive history linked list have loop
+*/
+int Shell_Archive_History (Shell_Handle_t *shell)
+{
+    int ret = 0;
+    /*check cache limit*/
+    while (shell->cache_size > shell->history_size_limit - shell->history_size)
+    {
+        /*kill most older history*/
+        ret = Shell_Delete_Oldest_History(shell);
+        if (ret < 0)
+        {
+            return ret;
+        }
+    }
     /*archive this buff*/
     void *buff_ptr = malloc(shell->cache_size);
-    if (NULL == buff_ptr)
+    while (NULL == buff_ptr)
     {
-       return -SHELL_NO_MEM;
+        /*kill most older history*/
+        ret = Shell_Delete_Oldest_History(shell);
+        if (ret < 0)
+        {
+            return ret;
+        }
+        buff_ptr = malloc(shell->cache_size);
     }
     memcpy(buff_ptr, shell->cache_buff, shell->cache_size);
     Linked_List_Node_t *his = Linked_List_Node_Init(buff_ptr, shell->cache_size);
     shell->history = Linked_List_Add_Head(shell->history, his);
-
-    /*reset buff*/
-    memset(shell->cache_buff, ANSI_END_CODE, sizeof(shell->cache_buff));
-    shell->cache_size = 0;
+    shell->history_size += shell->cache_size;
     return 0;
 }
 
@@ -359,6 +465,131 @@ int Shell_Display_Command_Help (Shell_Handle_t *shell, const Shell_Command_Typed
     return 0;
 }
 
+/*
+ * @brief 该函数用于将输入的参数转为整型
+ * @param param
+ * @param num
+ * @return 0 is success
+ * @return nagetive is error code
+*/
+int Shell_Conversion_Str_to_Int (char *param, int *num)
+{
+    /*this fuction only can opration 10 base int*/
+    /*need more opration 0x and 1e3 like number*/
+    char *ptr  = param;
+    int nagetive = 1;
+    *num = 0;
+    /*jump space*/
+    while (*ptr == ' ')ptr++;
+    /*check the first str*/
+    if (*ptr == '-')
+    {
+        nagetive = -1;
+        ptr++;
+    }
+    else if(*ptr == '+')
+    {
+        ptr++;
+    }
+    /*the first number*/
+    while (*ptr != '\0' && *ptr >= '0' && *ptr <= '9' )
+    {
+        *num = (*num * 10) + (*ptr - '0');
+        ptr++;
+    }
+    if (ptr == param)
+    {
+        *num = 0;
+        return -SHELL_ERROR;
+    }
+    else if (*ptr != '\0')
+    {
+        *num = 0;
+        return -SHELL_NO_FETCH;
+    }
+    *num *= nagetive;
+    return 0;
+}
+
+/*
+ * @brief 该函数用于将输入参数转换为浮点型
+ * @param param
+ * @param num
+ * @return 0 is success
+ * @return nagetive is error code
+*/
+int Shell_Conversion_Str_to_Float (char *param, float *num)
+{
+    char *ptr  = param;
+    float nagetive = 1;
+    *num = 0;
+    /*jump space*/
+    while (*ptr == ' ')ptr++;
+    /*check the first str*/
+    if (*ptr == '-')
+    {
+        nagetive = -1;
+        ptr++;
+    }
+    else if(*ptr == '+')
+    {
+        ptr++;
+    }
+    while (*ptr != '\0' && *ptr >= '0' && *ptr <= '9' )
+    {
+        *num = (*num * 10.f) + (*ptr - '0');
+        ptr++;
+    }
+    if (ptr == param)
+    {
+        *num = 0;
+        return -SHELL_ERROR;
+    }
+    else if (*ptr == '.')
+    {
+        /*look is '.' ?*/
+        ptr++;
+        float xiaoshu = 0.1f;
+        while (*ptr != '\0' && *ptr >= '0' && *ptr <= '9' )
+        {
+            *num += (*ptr - '0') * xiaoshu;
+            xiaoshu *= 0.1;
+            ptr++;
+        }
+    }
+    if (*ptr != '\0')
+    {
+        return -SHELL_NO_FETCH;
+    }
+    *num *= nagetive;
+    return 0;
+}
+
+/*
+ * @brief 该函数用于将输入参数转为bool型
+ * @param param
+ * @param true_type 判断为true的字符串
+ * @param false_type 判断为false的字符串
+ * @return 0 false
+ * @return 1 true
+ * @return nagative is error code
+*/
+int Shell_Conversion_Str_to_Bool (char *param, const char *true_type, const char *false_type)
+{
+    if (strcmp((const char *)param, true_type) == 0)
+    {
+        return 1;
+    }
+    else if (strcmp((const char *)param, false_type) == 0)
+    {
+        return 0;
+    }
+    else
+    {
+        return -SHELL_NO_FETCH;
+    }
+}
+
 //自动补全(只完成了关联搜索，不会自动修改当前补全档)
 /*
  * @brief 该函数用于进行函数补全，并且在下方显示出来，该函数不会修改当前缓冲区内的数据
@@ -381,7 +612,7 @@ static int Terminal_Function_Complite (Shell_Handle_t *shell,
     secend_cache[cache_size] = '\0';
     //dilime params
     void *params[SHELL_MAX_PARAM_NUMBER];
-    unsigned char param_number = Terminal_Get_Param(secend_cache," ",params,SHELL_MAX_PARAM_NUMBER);
+    unsigned char param_number = Shell_Get_Param(secend_cache," ",params,SHELL_MAX_PARAM_NUMBER);
     Shell_Command_Typedef *command_list[shell->command_num];
     if (Shell_Foreach_Command(shell, command_list))
     {
@@ -699,7 +930,7 @@ int Shell_Task (Shell_Handle_t *shell)
         break;
     default:                        //notthing juet nomal data
         /*save to cache buff*/
-        if (shell->cache_size < sizeof(shell->cache_buff))
+        if (shell->cache_size < sizeof(shell->cache_buff) - 1)
         {
             shell->cache_buff[shell->cache_size] = data[0];
             shell->cache_size++;
@@ -714,12 +945,21 @@ int Shell_Task (Shell_Handle_t *shell)
     /*get buff*/
     if(shell->cache_size > 1)
     {
+        //archive cache to histiory
+        if (Shell_Archive_History(shell) < 0)
+        {
+            SHELL_ERR(shell, "cache history is loop or memory out");
+        }
+
+        /*this function will change cache, so must archive cache befor this function*/
         //dilime params
         void *params[SHELL_MAX_PARAM_NUMBER + 1];
         params[0] = (void *)shell;
-        short params_number = Terminal_Get_Param(shell->cache_buff, " ", &params[1], SHELL_MAX_PARAM_NUMBER);
+        short params_number = Shell_Get_Param(shell->cache_buff, " ", &params[1], SHELL_MAX_PARAM_NUMBER);
+
         //search functuin
         const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell,(char *)params[1]);
+
         if (NULL == cmd)
         {
             Terminal_Print(shell, "%s : can`t not fine command\r\n",params[1]);
@@ -729,17 +969,14 @@ int Shell_Task (Shell_Handle_t *shell)
         {
             shell->ret = cmd->terminal_function(params_number,params);
         }
-        //archive cache to histiory
-        if (Shell_Archive_History(shell) < 0)
-        {
-            SHELL_ERR(shell, "cache history is loop or memory out");
-        }
+
     }
     else
     {
         shell->ret = 0;
-        SHELL_CLEAN_BUFF(shell);
     }
+    /*clean buff*/
+    SHELL_CLEAN_BUFF(shell);
     //anthe loop steart
     shell->history_entry = 0;
     SHELL_HEAD(shell, shell->ret, ANSI_NONE);

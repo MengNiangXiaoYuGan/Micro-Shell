@@ -145,9 +145,9 @@ typedef struct
 */
 #define SHELL_PARAM_DEFINE(na, ni, he) \
 {\
-    .full_name = na,\
-    .nick_name = ni,\
-    .help = he\
+    .full_name = (na),\
+    .nick_name = (ni),\
+    .help = (he),\
 },
 
 /*
@@ -164,18 +164,18 @@ typedef struct
  * @note  主干命令的help参数被默认放置在后缀 --help
  *          以及-h 的参数下，请注意不要让这两个参数被占用
 */
-#define SHELL_COMMAND_DEFINE(na,he,api,...)                             \
+#define SHELL_COMMAND_DEFINE(na, he, api, ...)                          \
 const Shell_Param_Typedef PARAM_##na [] = {                             \
-    SHELL_PARAM_DEFINE("--help", "-h", he)                              \
-    ##__VA_ARGS__                                                       \
+    SHELL_PARAM_DEFINE("--help", "-h", (he))                            \
+    __VA_ARGS__                                                         \
 };                                                                      \
 const Shell_Command_Typedef COMMAND_##na = {                            \
     .name = #na,                                                        \
     .params = PARAM_##na,                                               \
-    .terminal_function = api,                                           \
+    .terminal_function = (api),                                         \
     .param_num = sizeof(PARAM_##na)/sizeof(Shell_Param_Typedef),        \
 };                                                                      \
-LINKED_LIST_NODE_DEFINE_STATIC(na,                                      \
+LINKED_LIST_NODE_DEFINE_STATIC((na),                                    \
     (void *)&COMMAND_##na,                                              \
     sizeof(COMMAND_##na));
 
@@ -239,6 +239,35 @@ int Shell_Complite_Param_To_Num(const Shell_Command_Typedef *cmd, char *param);
  *                  --save      -s      save settings
 */
 int Shell_Display_Command_Help (Shell_Handle_t *shell, const Shell_Command_Typedef *cmd);
+
+/*
+ * @brief 该函数用于将输入的参数转为整型
+ * @param param
+ * @param num
+ * @return 0 is success
+ * @return nagetive is error code
+*/
+int Shell_Conversion_Str_to_Int (char *param, int *num);
+
+/*
+ * @brief 该函数用于将输入参数转换为浮点型
+ * @param param
+ * @param num
+ * @return 0 is success
+ * @return nagetive is error code
+*/
+int Shell_Conversion_Str_to_Float (char *param, float *num);
+
+/*
+ * @brief 该函数用于将输入参数转为bool型
+ * @param param
+ * @param true_type 判断为true的字符串
+ * @param false_type 判断为false的字符串
+ * @return 0 false
+ * @return 1 true
+ * @return nagative is error code
+*/
+int Shell_Conversion_Str_to_Bool (char *param, const char *true_type, const char *false_type);
 
 /******************************************API FUNCTION********************************************* */
 
