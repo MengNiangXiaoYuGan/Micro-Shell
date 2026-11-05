@@ -84,7 +84,7 @@ int cmd_test (int argc,void *argv[])
             if (i + 1 <= argc)
             {
                 i++;
-                long int emp = 0;
+                int emp = 0;
                 if (Shell_Conversion_Str_to_Int(argv[i], &emp) < 0)
                 {
                     SHELL_ERR(shell, "cannot vovertion this params");
@@ -216,7 +216,7 @@ void Terminal_Print(Shell_Handle_t *shell,
  * @param max_num   最多参数数量
  * @return 分割后的参数数量
 */
-static short Terminal_Get_Param(char *message,
+short static Shell_Get_Param(char *message,
         char *delim,
         void *get[],
         short max_number)
@@ -244,17 +244,33 @@ inline unsigned char Shell_get_Command_List_Size(Shell_Handle_t *shell)
 }
 
 /*
- * @brief 该函数用于归档历史记录
+ * @brief 该函数用于清除最旧的历史记录（尾删）
+ *         不直接使用linked-list库的尾删函数
+ *         的主要原因是历史记录的data同样使用
+ *         malloc获取，需要free，而linked-list
+ *         的尾删函数没有这个功能
  * @param shell
  * @return 0 is success
- * @return nagetive history linked list have loop
+ * @return -SHELL_NOMEM 历史记录已经删光了
+ * @return -SHELL_ERROR 历史记录回环了（在实际程序中这不应该出现）
 */
-int Shell_Archive_History (Shell_Handle_t *shell)
+int static Shell_Delete_Oldest_History(Shell_Handle_t *shell)
 {
-    /*check cache limit*/
-    while (shell->cache_size > shell->history_size_limit - shell->history_size)
+    if (shell->history == NULL)
     {
-        /*kill most older history*/
+        /*if no more history list*/
+        return -SHELL_NO_MEM;
+    }
+    else if (shell->history->next_node == NULL)
+    {
+        /*last one history*/
+        free(shell->history->data);
+        free(shell->history);
+        shell->history = NULL;
+    }
+    else
+    {
+        /*kill older history*/
         Linked_List_Node_t *node = shell->history;
         Linked_List_Node_t *start = node;
         while (NULL != node->next_node->next_node)
@@ -270,11 +286,39 @@ int Shell_Archive_History (Shell_Handle_t *shell)
         free(node->next_node);
         node->next_node = NULL;
     }
+    return 0;
+}
+
+/*
+ * @brief 该函数用于归档历史记录
+ * @param shell
+ * @return 0 is success
+ * @return nagetive history linked list have loop
+*/
+int Shell_Archive_History (Shell_Handle_t *shell)
+{
+    int ret = 0;
+    /*check cache limit*/
+    while (shell->cache_size > shell->history_size_limit - shell->history_size)
+    {
+        /*kill most older history*/
+        ret = Shell_Delete_Oldest_History(shell);
+        if (ret < 0)
+        {
+            return ret;
+        }
+    }
     /*archive this buff*/
     void *buff_ptr = malloc(shell->cache_size);
-    if (NULL == buff_ptr)
+    while (NULL == buff_ptr)
     {
-       return -SHELL_NO_MEM;
+        /*kill most older history*/
+        ret = Shell_Delete_Oldest_History(shell);
+        if (ret < 0)
+        {
+            return ret;
+        }
+        buff_ptr = malloc(shell->cache_size);
     }
     memcpy(buff_ptr, shell->cache_buff, shell->cache_size);
     Linked_List_Node_t *his = Linked_List_Node_Init(buff_ptr, shell->cache_size);
@@ -428,25 +472,42 @@ int Shell_Display_Command_Help (Shell_Handle_t *shell, const Shell_Command_Typed
  * @return 0 is success
  * @return nagetive is error code
 */
-int Shell_Conversion_Str_to_Int (char *param, long int *num)
+int Shell_Conversion_Str_to_Int (char *param, int *num)
 {
-
-    /*浪费太多空间了，需要用更加精简的实现，不应当继续使用strto函数了*/
-
-    char *str = param;
-    *num = strtol(param, &str, 10);
-    if (*str != '\0')
+    /*this fuction only can opration 10 base int*/
+    /*need more opration 0x and 1e3 like number*/
+    char *ptr  = param;
+    int nagetive = 1;
+    *num = 0;
+    /*jump space*/
+    while (*ptr == ' ')ptr++;
+    /*check the first str*/
+    if (*ptr == '-')
     {
-        return -SHELL_NO_FETCH;
+        nagetive = -1;
+        ptr++;
     }
-    else if (str == param)
+    else if(*ptr == '+')
     {
+        ptr++;
+    }
+    /*the first number*/
+    while (*ptr != '\0' && *ptr >= '0' && *ptr <= '9' )
+    {
+        *num = (*num * 10) + (*ptr - '0');
+        ptr++;
+    }
+    if (ptr == param)
+    {
+        *num = 0;
         return -SHELL_ERROR;
     }
-    else if (*num == 9223372036854775807 || *num == -9223372036854775807)
+    else if (*ptr != '\0')
     {
-        return -SHELL_OVER_RANGE;
+        *num = 0;
+        return -SHELL_NO_FETCH;
     }
+    *num *= nagetive;
     return 0;
 }
 
@@ -459,17 +520,48 @@ int Shell_Conversion_Str_to_Int (char *param, long int *num)
 */
 int Shell_Conversion_Str_to_Float (char *param, float *num)
 {
-    /*浪费太多空间了，需要用更加精简的实现，不应当继续使用strto函数了*/
-    char *str = param;
-    *num = strtof(param, &str);
-    if (*str != '\0')
+    char *ptr  = param;
+    float nagetive = 1;
+    *num = 0;
+    /*jump space*/
+    while (*ptr == ' ')ptr++;
+    /*check the first str*/
+    if (*ptr == '-')
+    {
+        nagetive = -1;
+        ptr++;
+    }
+    else if(*ptr == '+')
+    {
+        ptr++;
+    }
+    while (*ptr != '\0' && *ptr >= '0' && *ptr <= '9' )
+    {
+        *num = (*num * 10.f) + (*ptr - '0');
+        ptr++;
+    }
+    if (ptr == param)
+    {
+        *num = 0;
+        return -SHELL_ERROR;
+    }
+    else if (*ptr == '.')
+    {
+        /*look is '.' ?*/
+        ptr++;
+        float xiaoshu = 0.1f;
+        while (*ptr != '\0' && *ptr >= '0' && *ptr <= '9' )
+        {
+            *num += (*ptr - '0') * xiaoshu;
+            xiaoshu *= 0.1;
+            ptr++;
+        }
+    }
+    if (*ptr != '\0')
     {
         return -SHELL_NO_FETCH;
     }
-    else if (str == param)
-    {
-        return -SHELL_ERROR;
-    }
+    *num *= nagetive;
     return 0;
 }
 
@@ -520,7 +612,7 @@ static int Terminal_Function_Complite (Shell_Handle_t *shell,
     secend_cache[cache_size] = '\0';
     //dilime params
     void *params[SHELL_MAX_PARAM_NUMBER];
-    unsigned char param_number = Terminal_Get_Param(secend_cache," ",params,SHELL_MAX_PARAM_NUMBER);
+    unsigned char param_number = Shell_Get_Param(secend_cache," ",params,SHELL_MAX_PARAM_NUMBER);
     Shell_Command_Typedef *command_list[shell->command_num];
     if (Shell_Foreach_Command(shell, command_list))
     {
@@ -863,7 +955,7 @@ int Shell_Task (Shell_Handle_t *shell)
         //dilime params
         void *params[SHELL_MAX_PARAM_NUMBER + 1];
         params[0] = (void *)shell;
-        short params_number = Terminal_Get_Param(shell->cache_buff, " ", &params[1], SHELL_MAX_PARAM_NUMBER);
+        short params_number = Shell_Get_Param(shell->cache_buff, " ", &params[1], SHELL_MAX_PARAM_NUMBER);
 
         //search functuin
         const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell,(char *)params[1]);

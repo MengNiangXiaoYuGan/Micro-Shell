@@ -98,7 +98,7 @@ while(1)
 |`clean`|清除屏幕上所有显示的东西|
 |`clear`|与上一个命令一样|
 
-当然，相信各位一定不是为了使用这四个简单到不行的命令而移植这个库的，所以，使用的第一步，就是开始加载自己的函数，作为一个命令启动，*Micro Shell*的独特性就在于此，该库弃用了大部分shell支持的静态结构体数组命令表，转而使用链表作为命令索引，所以用户可以在初始化后，在库的外部动态注册命令并且使用，当然，为了实现这个特性，*Micor Shell*使用了了大量的指针，对内存的占用以及flash的占用会比较大，在当前版本，静态编译的库占用的空间大概在`RAM:0.8Kbytes Flash:15Kbytes`左右，随着命令的增加，占用会进一步增加，为了安全考虑，所有的命令结构都使用静态常量声明，而命令结构的链表索引使用静态声明，而不是通过malloc分配，在当前版本中，只有历史记录索引以及历史记录本身使用malloc分配的内存。随着命令数量的增长，消耗flash的速度应该会比消耗ram的速度要快不少。
+当然，相信各位一定不是为了使用这四个简单到不行的命令而移植这个库的，所以，使用的第一步，就是开始加载自己的函数，作为一个命令启动，*Micro Shell*的独特性就在于此，该库弃用了静态结构体数组命令表，转而使用链表作为命令索引，所以用户可以在初始化后，在库的外部动态注册命令并且使用，当然，为了实现这个特性，*Micor Shell*使用了了大量的指针，对内存的占用以及flash的占用会比较大，在当前版本，静态编译的库占用的空间大概在`RAM:0.8Kbytes Flash:15Kbytes`左右，随着命令的增加，占用会进一步增加，为了安全考虑，所有的命令结构都使用静态常量声明，而命令结构的链表索引使用静态声明，而不是通过malloc分配，在当前版本中，只有历史记录索引以及历史记录本身使用malloc分配的内存。随着命令数量的增长，消耗flash的速度应该会比消耗ram的速度要快不少。
 
 为了加载自己的函数，用户需要先声明定义一个用户函数，之后使用简单的*宏魔法*将用户函数以及对应的命令信息定义为一个静态的结构体，之后通过调用注册函数，将结构体指针纳入`Shell`实例的“搜索路径中”，从而实现在`micor-shell.c`源文件外加载命令的过程。由于原理讲起来比较复杂，首先我们先简单声明一个例子，之后再慢慢解析:
 ~~~~~c
@@ -179,18 +179,18 @@ typedef int Terminal_Function_t(int,void**);
  * @note  主干命令的help参数被默认放置在后缀 --help
  *          以及-h 的参数下，请注意不要让这两个参数被占用
 */
-#define SHELL_COMMAND_DEFINE(na,he,api,...)                             \
+#define SHELL_COMMAND_DEFINE(na, he, api, ...)                          \
 const Shell_Param_Typedef PARAM_##na [] = {                             \
-    SHELL_PARAM_DEFINE("--help", "-h", he)                              \
-    ##__VA_ARGS__                                                       \
+    SHELL_PARAM_DEFINE("--help", "-h", (he))                            \
+    __VA_ARGS__                                                         \
 };                                                                      \
 const Shell_Command_Typedef COMMAND_##na = {                            \
     .name = #na,                                                        \
     .params = PARAM_##na,                                               \
-    .terminal_function = api,                                           \
+    .terminal_function = (api),                                         \
     .param_num = sizeof(PARAM_##na)/sizeof(Shell_Param_Typedef),        \
 };                                                                      \
-LINKED_LIST_NODE_DEFINE_STATIC(na,                                      \
+LINKED_LIST_NODE_DEFINE_STATIC((na),                                    \
     (void *)&COMMAND_##na,                                              \
     sizeof(COMMAND_##na));
 ~~~~~
@@ -207,9 +207,9 @@ LINKED_LIST_NODE_DEFINE_STATIC(na,                                      \
 */
 #define SHELL_PARAM_DEFINE(na, ni, he) \
 {\
-    .full_name = na,\
-    .nick_name = ni,\
-    .help = he\
+    .full_name = (na),\
+    .nick_name = (ni),\
+    .help = (he),\
 },
 ~~~~~ 
 - 这个宏就比上一个短多了，这个宏会声明一个结构体元素，添加在命令的参数结构体内，以`--help`参数为例，实际的写法大概是这样的
@@ -268,7 +268,13 @@ int Shell_Complite_Param_To_Num(Shell_Command_Typedef *cmd, char *param);
 ~~~~~
  - 该函数可以将传入的字符串与命令结构体中的参数列表进行比对，然后返回命令的序号，这就是为什么在声明命令参数的时候，参数的顺序如此重要，并且在之前的篇幅中，我们也介绍过，0号参数默认为`--help`或者`-h`，而从1开始，根据在`SHELL_COMMAND_DEFINE`宏中声明的参数顺序，一一递增，在上面的例子中，`--on`参数的顺序值是1，`--off`参数的顺序值是2，用户可以很方便地调用一个`switch`函数实现一次参数解析。
 
- - 那么多个参数怎么办呢？我们比较推荐的方法是使用`for`循环，依次调用`Shell_Complite_Param_To_Num`函数进行参数解析，如果参数后面跟有数值的话，则可以使用（这部分还没开发完）函数进行浮点数，整数，字符串布尔值的转换。随后将参数继续往后推进，直到遍历`size`个参数。
+ - 那么多个参数怎么办呢？我们比较推荐的方法是使用`for`循环，依次调用`Shell_Complite_Param_To_Num`函数进行参数解析，如果参数后面跟有数值的话，则可以使用库内预留的函数进行浮点数，整数，字符串布尔值的转换。随后将参数继续往后推进，直到遍历`size`个参数。当前支持的参数转换函数如下所示
+  
+|函数名称|函数用途|函数参数|函数返回值|
+|:-----|:-----|:-----|:-----|
+|`Shell_Conversion_Str_to_Int`|将传入参数转换为整型|`param`:输入的参数字符串，yi'\0'结尾 `num`：回传数字的地址，解析的数字会回传到这个地址的变量下|`0`代表转换成功，`-5`为参数里面含有无法转换的东西，`-1`为转换失败，参数不合法|
+|`Shell_Conversion_Str_to_Float`|将传入参数转换为浮点型|`param`:输入的参数字符串，yi'\0'结尾 `num`：回传数字的地址，解析的数字会回传到这个地址的变量下|`0`代表转换成功，`-5`为参数里面含有无法转换的东西，`-1`为转换失败，参数不合法|
+|`Shell_Conversion_Str_to_Bool`|将传入参数转换为布尔值|`param`:输入的参数字符串，yi'\0'结尾 `true_type`：当参数字符串与这个这个字符串匹配，则返回true `false_type`:当参数字符串与这个字符串匹配，则返回false|`0`代表false，`1`代表true， `-1`代表两者皆不匹配|
 
   4. 最后，在`Shell_Init`函数之后的随便哪个地方调用`Shell_Register_Command`函数，将命令注册到Shell实例里，即可正常使用。
 ~~~~~c

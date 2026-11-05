@@ -247,7 +247,7 @@ int Shell_Display_Command_Help (Shell_Handle_t *shell, const Shell_Command_Typed
  * @return 0 is success
  * @return nagetive is error code
 */
-int Shell_Conversion_Str_to_Int (char *param, long int *num);
+int Shell_Conversion_Str_to_Int (char *param, int *num);
 
 /*
  * @brief 该函数用于将输入参数转换为浮点型
