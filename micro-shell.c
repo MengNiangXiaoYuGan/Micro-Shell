@@ -179,11 +179,11 @@ SHELL_COMMAND_DEFINE(clear, "clean screen", cmd_clean)
 void Terminal_Print(Shell_Handle_t *shell,
     const char* format,...)
 {
-    char temp[4096];
+    char temp[SHELL_POP_CACHE_DEEP];
     va_list canshu;
     int data_num = 0;
     va_start(canshu,format);
-    data_num = vsprintf(temp,format,canshu);
+    data_num = vsnprintf(temp, SHELL_POP_CACHE_DEEP, format, canshu);
     va_end(canshu);
     shell->terminal_send_message(temp, data_num);
 }
@@ -244,6 +244,7 @@ int static Shell_Delete_Oldest_History(Shell_Handle_t *shell)
     else if (shell->history->next_node == NULL)
     {
         /*last one history*/
+        shell->history_size -= (shell->history->size + sizeof(Linked_List_Node_t));
         free(shell->history->data);
         free(shell->history);
         shell->history = NULL;
@@ -261,8 +262,8 @@ int static Shell_Delete_Oldest_History(Shell_Handle_t *shell)
                 return -SHELL_ERROR;
             }
         }
+        shell->history_size -= (node->next_node->size + sizeof(Linked_List_Node_t));
         free(node->next_node->data);
-        shell->history_size -= node->next_node->size;
         free(node->next_node);
         node->next_node = NULL;
     }
@@ -302,8 +303,13 @@ int Shell_Archive_History (Shell_Handle_t *shell)
     }
     memcpy(buff_ptr, shell->cache_buff, shell->cache_size);
     Linked_List_Node_t *his = Linked_List_Node_Init(buff_ptr, shell->cache_size);
+    if (NULL == his)
+    {
+        free(buff_ptr);
+        return -SHELL_NO_MEM;
+    }
     shell->history = Linked_List_Add_Head(shell->history, his);
-    shell->history_size += shell->cache_size;
+    shell->history_size += (shell->cache_size + sizeof(Linked_List_Node_t));
     return 0;
 }
 
@@ -692,6 +698,7 @@ static int Terminal_ESC_Mulit_Byte_Anlayze (Shell_Handle_t *shell,
             error_code = Shell_get_history_by_index(shell, (void *)&data_buf, shell->history_entry);
             if (error_code < 0)
             {
+                shell->history_entry--;
                 shell->mulit_key_status = 0;
                 return -SHELL_NO_FETCH;
             }
@@ -720,6 +727,7 @@ static int Terminal_ESC_Mulit_Byte_Anlayze (Shell_Handle_t *shell,
                 error_code = Shell_get_history_by_index(shell, (void *)&data_buf, shell->history_entry);
                 if (error_code < 0)
                 {
+                    shell->history_entry++;
                     shell->mulit_key_status = 0;
                     return -SHELL_NO_FETCH;
                 }
@@ -817,13 +825,44 @@ int Shell_Iint (Shell_Handle_t *shell,
  * @param shell
  * @param command
  * @return 0 is success
+ * @return negetive is error
  * @note 注意，传入的是命令的指针
  *       该函数必须在Shell_Init调用后才能调用，否则会出现命令表回环无法遍历的情况
 */
 int Shell_Register_Command(Shell_Handle_t *shell, Linked_List_Node_t *command)
 {
-    shell->Shell_command = Linked_List_Add_Head(shell->Shell_command, command);
-    shell->command_num++;
+    if (shell->command_num >= 255)
+    {
+        shell->ret = -SHELL_NO_MEM;
+        SHELL_NEW_LINE(shell);
+        SHELL_ERR(shell, "command numbers max, reject register");
+        SHELL_HEAD(shell, shell->ret, ANSI_NONE);
+        return -SHELL_NO_MEM;
+    }
+    Linked_List_Node_t *ptr = shell->Shell_command;
+    if (NULL ==ptr)
+    {
+        shell->Shell_command = Linked_List_Add_Head(shell->Shell_command, command);
+        shell->command_num++;
+    }
+    else
+    {
+        for (unsigned char i = 0; i < shell->command_num; i++)
+        {
+            if (ptr == command)
+            {
+                /*this command is register now*/
+                shell->ret = -SHELL_COMMAND_EXITS;
+                SHELL_NEW_LINE(shell);
+                SHELL_ERR(shell, "this commander was registed");
+                SHELL_HEAD(shell, shell->ret, ANSI_NONE);
+                return -SHELL_COMMAND_EXITS;
+            }
+            ptr = ptr->next_node;
+        }
+        shell->Shell_command = Linked_List_Add_Head(shell->Shell_command, command);
+        shell->command_num++;
+    }
     return 0;
 }
 
@@ -980,7 +1019,7 @@ int Shell_Task (Shell_Handle_t *shell)
         void *params[SHELL_MAX_PARAM_NUMBER + 1];
         params[0] = (void *)shell;
         short params_number = Shell_Get_Param(shell->cache_buff, " ", &params[1], SHELL_MAX_PARAM_NUMBER);
-
+        if (params_number < 1) return -SHELL_NO_FETCH;
         //search functuin
         const Shell_Command_Typedef *cmd = Shell_Serch_Command(shell,(char *)params[1]);
 
@@ -993,10 +1032,6 @@ int Shell_Task (Shell_Handle_t *shell)
         {
             shell->ret = cmd->terminal_function(params_number,params);
         }
-    }
-    else
-    {
-        shell->ret = 0;
     }
     /*clean buff*/
     SHELL_CLEAN_BUFF(shell);

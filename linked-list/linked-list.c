@@ -43,7 +43,9 @@ Linked_List_Node_t* Linked_List_Node_Init(void *data_ptr, int size)
 int Linked_List_Foreach_Node (Linked_List_Node_t *node, 
         Linked_List_Node_t *node_list[])
 {
+    if (NULL == node)return -1;
     int ret = 0;
+
     Linked_List_Node_t *ptr = node;
     /*To prevent a linked list loop, 
         use an extra pointer to indicate 
@@ -51,11 +53,23 @@ int Linked_List_Foreach_Node (Linked_List_Node_t *node,
         node is the same as the current node,
         return the size.*/
     const Linked_List_Node_t *start = ptr;
+    Linked_List_Node_t *fast = ptr;
     node_list[ret] = ptr;
     while (NULL != ptr->next_node)
     {
         ret ++;
         ptr = ptr->next_node;
+        if (fast->next_node != NULL)
+        {
+            if (fast->next_node->next_node != NULL)
+            {
+                fast = fast->next_node->next_node;
+            }
+        }
+        if (fast == ptr)
+        {
+            return -1;
+        }
         node_list[ret] = ptr;
         if (ptr == start)
         {
@@ -107,6 +121,8 @@ Linked_List_Node_t* Linked_List_Add_Tail(Linked_List_Node_t *node,
 */
 int Linked_List_Distory_All_List(Linked_List_Node_t *node)
 {
+    if (NULL == node)return -1;
+
     int ret = 0;
     Linked_List_Node_t *ptr = node;
     const Linked_List_Node_t *start = ptr;
