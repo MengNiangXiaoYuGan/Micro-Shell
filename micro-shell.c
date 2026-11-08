@@ -70,7 +70,7 @@ int cmd_test (int argc,void *argv[])
                     SHELL_ERR(shell, "cannot vovertion this params");
                     return -SHELL_NO_FETCH;
                 }
-                Terminal_Print(shell, "conversion value is %ld\r\n", emp);
+                Terminal_Print(shell, "conversion value is %d\r\n", emp);
             }
             else
             {
@@ -196,7 +196,7 @@ void Terminal_Print(Shell_Handle_t *shell,
  * @param max_num   最多参数数量
  * @return 分割后的参数数量
 */
-short static Shell_Get_Param(char *message,
+static short Shell_Get_Param(char *message,
         char *delim,
         void *get[],
         short max_number)
@@ -234,7 +234,7 @@ inline unsigned char Shell_get_Command_List_Size(Shell_Handle_t *shell)
  * @return -SHELL_NOMEM 历史记录已经删光了
  * @return -SHELL_ERROR 历史记录回环了（在实际程序中这不应该出现）
 */
-int static Shell_Delete_Oldest_History(Shell_Handle_t *shell)
+static int Shell_Delete_Oldest_History(Shell_Handle_t *shell)
 {
     if (shell->history == NULL)
     {
@@ -775,7 +775,7 @@ static int Terminal_ESC_Mulit_Byte_Anlayze (Shell_Handle_t *shell,
  * @return 0
  * @return -SHELL_ERROR   初始化失败
 */
-int Shell_Iint (Shell_Handle_t *shell,
+int Shell_Init (Shell_Handle_t *shell,
             void (*send_data)(char *message,unsigned short size))
 {
     if (NULL == send_data)
@@ -785,6 +785,7 @@ int Shell_Iint (Shell_Handle_t *shell,
     shell->terminal_send_message = send_data;
 
     /*init data cache*/
+    memset(shell->host_name, 0, sizeof(shell->host_name));
     strncpy(shell->host_name, SHELL_HOST_NAME, sizeof(SHELL_HOST_NAME));
     SHELL_CLEAN_BUFF(shell);
     SHELL_CLEAN_CURSOR(shell);
@@ -920,14 +921,14 @@ int Shell_Task (Shell_Handle_t *shell)
         unsigned int tmp_of_size = 0;
         SHELL_CLEAN_BUFF(shell);
         tmp_of_size = Shell_get_history_by_index(shell, (void *)&tmp_of_history, shell->history_entry);
-        if (tmp_of_size < 0)
-        {
-            SHELL_NEW_LINE(shell);
-            SHELL_ERR(shell, "tmp history can not get form heap, system error");
-            SHELL_NEW_LINE(shell);
-            SHELL_HEAD(shell, shell->ret, ANSI_NONE);
-            return -SHELL_NO_MEM;
-        }
+        // if (tmp_of_size < 0)
+        // {
+        //     SHELL_NEW_LINE(shell);
+        //     SHELL_ERR(shell, "tmp history can not get form heap, system error");
+        //     SHELL_NEW_LINE(shell);
+        //     SHELL_HEAD(shell, shell->ret, ANSI_NONE);
+        //     return -SHELL_NO_MEM;
+        // }
         memcpy(shell->cache_buff, tmp_of_history, tmp_of_size - 1);
         /*cursor position is now settings*/
         shell->cache_size = tmp_of_size - 1;

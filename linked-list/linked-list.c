@@ -53,12 +53,10 @@ int Linked_List_Foreach_Node (Linked_List_Node_t *node,
         node is the same as the current node,
         return the size.*/
     Linked_List_Node_t *fast = ptr;
-    node_list[ret] = ptr;
 
     /*floyd ring check*/
     while (NULL != fast && NULL != fast->next_node)
     {
-        ret++;
         node_list[ret] = ptr;
         ptr = ptr->next_node;
         fast = fast->next_node->next_node;
@@ -66,14 +64,15 @@ int Linked_List_Foreach_Node (Linked_List_Node_t *node,
         {
             return -1;
         }
+        ret++;
     }
 
     /*foreach node at less*/
     while (NULL != ptr)
     {
-        ret++;
         node_list[ret] = ptr;
         ptr = ptr->next_node;
+        ret++;
     }
     return ret;
 }

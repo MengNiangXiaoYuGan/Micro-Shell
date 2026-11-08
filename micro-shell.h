@@ -317,7 +317,7 @@ int Shell_Conversion_Str_to_Bool (char *param, const char *true_type, const char
  * @return FOC_OK
  * @return -FOC_ERROR   初始化失败
 */
-int Shell_Iint (Shell_Handle_t *shell, void (*send_data)(char *message,unsigned short size));
+int Shell_Init (Shell_Handle_t *shell, void (*send_data)(char *message,unsigned short size));
 
 /*
  * @brief 该函数将会进行一次函数注册，将传入的用户函数
