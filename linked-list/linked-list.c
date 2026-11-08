@@ -52,31 +52,29 @@ int Linked_List_Foreach_Node (Linked_List_Node_t *node,
         that if during traversal the next 
         node is the same as the current node,
         return the size.*/
-    const Linked_List_Node_t *start = ptr;
     Linked_List_Node_t *fast = ptr;
     node_list[ret] = ptr;
-    while (NULL != ptr->next_node)
+
+    /*floyd ring check*/
+    while (NULL != fast && NULL != fast->next_node)
     {
-        ret ++;
+        ret++;
+        node_list[ret] = ptr;
         ptr = ptr->next_node;
-        if (fast->next_node != NULL)
-        {
-            if (fast->next_node->next_node != NULL)
-            {
-                fast = fast->next_node->next_node;
-            }
-        }
-        if (fast == ptr)
+        fast = fast->next_node->next_node;
+        if (ptr == fast)
         {
             return -1;
         }
-        node_list[ret] = ptr;
-        if (ptr == start)
-        {
-            break;
-        }
     }
-    ret ++;
+
+    /*foreach node at less*/
+    while (NULL != ptr)
+    {
+        ret++;
+        node_list[ret] = ptr;
+        ptr = ptr->next_node;
+    }
     return ret;
 }
 
