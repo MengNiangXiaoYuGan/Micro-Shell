@@ -118,7 +118,7 @@ int cmd_test (int argc,void *argv[])
         default:
             Terminal_Print (shell, "argc=%d ",argc);
             Terminal_Print (shell, "argv = [");
-            unsigned int a;
+            int a;
             for (a = 1; a < argc; a++)
             {
                 Terminal_Print(shell, "%s, ",(char *)argv[a]);
@@ -786,7 +786,7 @@ int Shell_Init (Shell_Handle_t *shell,
 
     /*init data cache*/
     memset(shell->host_name, 0, sizeof(shell->host_name));
-    strncpy(shell->host_name, SHELL_HOST_NAME, sizeof(SHELL_HOST_NAME));
+    strcpy(shell->host_name, SHELL_HOST_NAME);
     SHELL_CLEAN_BUFF(shell);
     SHELL_CLEAN_CURSOR(shell);
 
@@ -918,20 +918,20 @@ int Shell_Task (Shell_Handle_t *shell)
     {
         /*get history buf and size*/
         char *tmp_of_history = NULL;
-        unsigned int tmp_of_size = 0;
+        int tmp_of_size = 0;
         SHELL_CLEAN_BUFF(shell);
         tmp_of_size = Shell_get_history_by_index(shell, (void *)&tmp_of_history, shell->history_entry);
-        // if (tmp_of_size < 0)
-        // {
-        //     SHELL_NEW_LINE(shell);
-        //     SHELL_ERR(shell, "tmp history can not get form heap, system error");
-        //     SHELL_NEW_LINE(shell);
-        //     SHELL_HEAD(shell, shell->ret, ANSI_NONE);
-        //     return -SHELL_NO_MEM;
-        // }
+        if (tmp_of_size < 0)
+        {
+            SHELL_NEW_LINE(shell);
+            SHELL_ERR(shell, "tmp history can not get form heap, system error");
+            SHELL_NEW_LINE(shell);
+            SHELL_HEAD(shell, shell->ret, ANSI_NONE);
+            return -SHELL_NO_MEM;
+        }
         memcpy(shell->cache_buff, tmp_of_history, tmp_of_size - 1);
         /*cursor position is now settings*/
-        shell->cache_size = tmp_of_size - 1;
+        shell->cache_size = (unsigned int)(tmp_of_size - 1);
 
 
         // shell->cursor_position = shell->cache_size;
