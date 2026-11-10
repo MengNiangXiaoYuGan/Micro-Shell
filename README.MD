@@ -306,3 +306,5 @@ int Shell_Complite_Param_To_Num(Shell_Command_Typedef *cmd, char *param);
 ## 更新记录
  * 2026年11月5日 1.0.0发布
  * 2026年11月6日 1.0.1 安全更新，修复了一些会导致崩溃的bug
+ * 2026年11月8日 1.0.2 紧急安全更新，修复了几个会导致系统完全不可用的bug
+ * 2026年11月10日 none 热修，修复了一些初始化bug

@@ -18,22 +18,46 @@ extern"C"{
 /********************************SETTINGS************************************** */
 
 /*Max History cache size*/
+#if !defined(CONFIG_SHELL_CACHE_HISTORY)
 #define SHELL_CACHE_HISTORY         256 /*bytes*/
+#else
+#define SHELL_CACHE_HISTORY         CONFIG_SHELL_CACHE_HISTORY /*bytes*/
+#endif // CONFIG_SHELL_CACHE_HISTORY
 
 /*Max Cache buff size*/
+#if !defined(CONFIG_SHELL_CACHE_DEEP)
 #define SHELL_CACHE_DEEP            64  /*bytes*/
+#else
+#define SHELL_CACHE_DEEP            CONFIG_SHELL_CACHE_DEEP  /*bytes*/
+#endif // CONFIG_SHELL_CACHE_DEEP
 
 /*Max cache or output buff*/
+#if !defined(CONFIG_SHELL_POP_CACHE_DEEP)
 #define SHELL_POP_CACHE_DEEP        4096 /*bytes*/
+#else
+#define SHELL_POP_CACHE_DEEP        CONFIG_SHELL_POP_CACHE_DEEP /*bytes*/
+#endif // CONFIG_SHELL_POP_CACHE_DEEP
 
 /*Max param num*/
+#if !defined(CONFIG_SHELL_MAX_PARAM_NUMBER)
 #define SHELL_MAX_PARAM_NUMBER      6
+#else
+#define SHELL_MAX_PARAM_NUMBER      CONFIG_SHELL_MAX_PARAM_NUMBER
+#endif // CONFIG_SHELL_MAX_PARAM_NUMBER
 
 /*Host name max len*/
+#if !defined(CONFIG_SHELL_MAX_HOST_NAME_LEN)
 #define SHELL_MAX_HOST_NAME_LEN     16
+#else
+#define SHELL_MAX_HOST_NAME_LEN     CONFIG_SHELL_MAX_HOST_NAME_LEN
+#endif // CONFIG_SHELL_MAX_HOST_NAME_LEN
 
 /*Host name default*/
+#if !defined(CONFIG_SHELL_HOST_NAME)
 #define SHELL_HOST_NAME "root"
+#else
+#define SHELL_HOST_NAME CONFIG_SHELL_HOST_NAME
+#endif //CONFIG_SHELL_HOST_NAME 
 
 
 /**********************************DEFINE*************************************** */
@@ -61,6 +85,9 @@ extern"C"{
 #define ANSI_COLOR_WHT   "\x1B[37m"
 #define ANSI_COLOR_RESET "\x1B[0m"
 
+#if !defined(NULL)
+#define NULL ((void *)(0))
+#endif // NULL
 #if !defined(UNUSED)
 #define UNUSED(X) (void)X      /* To avoid gcc/g++ warnings */
 #endif // UNUSED   

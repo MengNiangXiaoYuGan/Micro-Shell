@@ -897,7 +897,7 @@ int Shell_push_data(Shell_Handle_t *shell,
 */
 int Shell_Task (Shell_Handle_t *shell)
 {
-    char data[2];
+    char data[2] = {'\0','\0'};
     unsigned char size = FIFO_pull_data(&shell->fifo, data, 1);
     if (size == 0)
     {
